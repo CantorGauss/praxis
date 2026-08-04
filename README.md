@@ -9,6 +9,8 @@ Praxis plugs into any OpenAI-compatible endpoint — a model on your own machine
 or a hosted gateway like OpenRouter. Everything it stores lives in one SQLite
 file on your disk. No account, no telemetry, no cloud anything.
 
+![Three characters mid-scene, each answering in their own right](docs/screenshots/chat.png)
+
 ## What actually happens
 
 **You put more than one of them in a room.** This is the fun part. Invite Anna
@@ -42,6 +44,13 @@ line of dialogue. They'll do the same back.
 
 Characters can walk in and out mid-scene, and you write the stage direction:
 "Gwendoline pushes the door open, soaked." Everyone in the room notices.
+
+**Everything about them is one page.** A name, a line of description, the
+pronouns others use for them, and a prompt in your own words. Pick a portrait
+from the built-in set, set how long their answers run, how loose their tone is.
+Four ready-made characters are there if you'd rather edit than start blank.
+
+![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters.png)
 
 **Long conversations don't get slow.** Past a certain point, older messages get
 condensed into a working memory instead of being dropped or dragged along
@@ -116,8 +125,7 @@ npm run tauri dev
 ```
 
 First launch walks you through languages, testing your server, picking a model
-and writing a first character. Four ready-made ones are there if you'd rather
-start by editing than from a blank page.
+and writing a first character.
 
 ## Your data
 
