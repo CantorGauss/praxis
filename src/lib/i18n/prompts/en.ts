@@ -75,9 +75,14 @@ export const enPrompts: PromptPack = {
           `${genderClause(userGender)} ` +
           `Their messages reach you prefixed with "${userName}: ".`,
         ...others.map(
-          (o) =>
-            `- ${o.name} — another character in the scene. ` +
-            `This is neither you nor ${userName}. ${genderClause(o.gender)}`,
+          (o) => {
+            const identity = o.description?.trim();
+            return (
+              `- ${o.name} — another character in the scene` +
+              `${identity ? `: ${identity}` : ""}. ` +
+              `This is neither you nor ${userName}. ${genderClause(o.gender)}`
+            );
+          },
         ),
         `- ${speakerName} — you. ${selfGenderClause(speakerGender)}`,
       ].join("\n");
@@ -264,29 +269,40 @@ export const enPrompts: PromptPack = {
   },
 
   summary: {
-    system: () =>
+    system: ({ maxBullets }) =>
       "You maintain the working memory of a conversation. Rewrite it entirely " +
-      "in English from the previous summary and the new messages, always " +
-      "giving priority to the most recent information. If an intention, a " +
-      "situation, a preference, a relationship, a decision or a question has " +
-      "changed, DELETE its obsolete version instead of keeping both. Keep no " +
-      "greetings, no small talk, no general tone, no passing reactions, no " +
-      "inconsequential details. Preserve precisely the active facts, " +
-      "commitments, decisions, lasting preferences, unresolved conflicts, open " +
-      "questions and recent events needed for the next line. Each message is " +
+      "in English from the previous summary and the new messages. The previous " +
+      "summary is a proposal to audit, never a source to copy: old information " +
+      "survives only while it is still true, active and useful to what comes " +
+      "next. Age without a current consequence is a reason to forget it. New " +
+      "messages always take priority and DELETE anything they contradict or " +
+      "supersede. CURRENT STATE is a snapshot replaced completely on every " +
+      "rewrite (at most 3 bullets). ACTIVE FACTS AND DECISIONS retains only " +
+      "lasting facts, constraints and commitments that remain valid (at most 4 " +
+      "bullets). OPEN QUESTIONS immediately removes anything answered, abandoned " +
+      "or no longer applicable (at most 3 bullets). IMPORTANT RECENT EVENTS keeps " +
+      "only events whose consequences are still active (at most 2 bullets). Keep " +
+      "no greetings, small talk, general tone, passing reactions or merely " +
+      "colourful details. Each message is " +
       "prefixed with its speaker: never mix up attributions. Invent nothing. " +
-      "Write bullets made of complete sentences ending in punctuation, then " +
+      `Absolute limit: ${maxBullets} bullets in total. If choices are needed, ` +
+      "prioritise active commitments and constraints, current situation, " +
+      "unresolved questions, lasting preferences, then recent events. Write " +
+      "bullets made of complete sentences ending in punctuation, then " +
       "properly finish every section you started. Answer only with these " +
       "sections: CURRENT STATE, ACTIVE FACTS AND DECISIONS, OPEN QUESTIONS, " +
       "IMPORTANT RECENT EVENTS. Omit an empty section.",
     user: ({ previousSummary, newMessages }) =>
       (previousSummary ? `Existing summary:\n${previousSummary}\n\n` : "") +
       `New messages to integrate:\n${newMessages}\n\n` +
-      "Now rewrite the complete memory. The new messages are more recent than " +
-      "the whole existing summary and correct it where necessary.",
+      "Now rewrite the complete memory. Audit every old bullet and remove it if " +
+      "the new messages no longer establish that it is active or useful. The new " +
+      "messages are more recent than the whole existing summary and correct it " +
+      "where necessary.",
     messageLine: (name, content) => `${name}: ${content}`,
     emptySummaryError: "the server returned an empty summary",
     truncatedSummaryError: "the server returned a truncated summary",
+    stalledSummaryError: "the summary rebuild made no progress",
   },
 
   emotion: {

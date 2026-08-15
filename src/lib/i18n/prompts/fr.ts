@@ -71,9 +71,14 @@ export const frPrompts: PromptPack = {
           `${genderClause(userGender)} ` +
           `Ses messages te sont transmis préfixés « ${userName} : ».`,
         ...others.map(
-          (o) =>
-            `- ${o.name} — un autre personnage de la scène. ` +
-            `Ce n'est ni toi, ni ${userName}. ${genderClause(o.gender)}`,
+          (o) => {
+            const identity = o.description?.trim();
+            return (
+              `- ${o.name} — un autre personnage de la scène` +
+              `${identity ? ` : ${identity}` : ""}. ` +
+              `Ce n'est ni toi, ni ${userName}. ${genderClause(o.gender)}`
+            );
+          },
         ),
         `- ${speakerName} — toi. ${selfGenderClause(speakerGender)}`,
       ].join("\n");
@@ -261,19 +266,27 @@ export const frPrompts: PromptPack = {
   },
 
   summary: {
-    system: () =>
+    system: ({ maxBullets }) =>
       "Tu maintiens la mémoire de travail d'une conversation. Réécris-la " +
       "entièrement en français à partir du résumé précédent et des nouveaux " +
-      "messages, en donnant toujours priorité aux informations les plus " +
-      "récentes. Si une intention, une situation, une préférence, une " +
-      "relation, une décision ou une question a changé, SUPPRIME sa version " +
-      "obsolète au lieu de conserver les deux. Ne garde ni salutations, ni " +
-      "bavardage, ni ton général, ni réactions passagères, ni détails sans " +
-      "conséquence. Conserve précisément les faits actifs, engagements, " +
-      "décisions, préférences durables, conflits non résolus, questions " +
-      "ouvertes et derniers événements nécessaires à la prochaine réplique. " +
+      "messages. Le résumé précédent est une proposition à auditer, jamais une " +
+      "source à recopier : une information ancienne ne survit que si elle est " +
+      "encore vraie, active et utile à la suite. L'ancienneté sans conséquence " +
+      "actuelle est une raison de l'oublier. Les nouveaux messages sont toujours " +
+      "prioritaires et SUPPRIMENT toute version contredite ou dépassée. " +
+      "ÉTAT ACTUEL est un instantané entièrement remplacé à chaque réécriture " +
+      "(3 puces maximum). FAITS ET DÉCISIONS ACTIFS ne conserve que les faits " +
+      "durables, contraintes et engagements encore valides (4 puces maximum). " +
+      "QUESTIONS OUVERTES retire immédiatement toute question répondue, abandonnée " +
+      "ou devenue sans objet (3 puces maximum). ÉVÉNEMENTS RÉCENTS IMPORTANTS ne " +
+      "garde que les événements dont les conséquences sont encore actives " +
+      "(2 puces maximum). Ne garde ni salutations, ni bavardage, ni ton général, " +
+      "ni réactions passagères, ni détail simplement pittoresque. " +
       "Chaque message est préfixé par son locuteur : ne mélange jamais les " +
-      "attributions. N'invente rien. Écris des puces constituées de phrases " +
+      `attributions. N'invente rien. Limite absolue : ${maxBullets} puces au total. ` +
+      "S'il faut choisir, privilégie dans cet ordre : engagements et contraintes " +
+      "actifs, situation courante, questions non résolues, préférences durables, " +
+      "puis événements récents. Écris des puces constituées de phrases " +
       "complètes terminées par une ponctuation, puis termine proprement toutes " +
       "les rubriques commencées. Réponds uniquement avec ces rubriques : " +
       "ÉTAT ACTUEL, FAITS ET DÉCISIONS ACTIFS, QUESTIONS OUVERTES, ÉVÉNEMENTS " +
@@ -281,11 +294,14 @@ export const frPrompts: PromptPack = {
     user: ({ previousSummary, newMessages }) =>
       (previousSummary ? `Résumé existant :\n${previousSummary}\n\n` : "") +
       `Nouveaux messages à intégrer :\n${newMessages}\n\n` +
-      "Réécris maintenant la mémoire complète. Les nouveaux messages sont " +
-      "plus récents que tout le résumé existant et le corrigent si nécessaire.",
+      "Réécris maintenant la mémoire complète. Examine chaque ancienne puce : " +
+      "supprime-la si les nouveaux messages ne permettent plus d'établir qu'elle " +
+      "est encore active ou utile. Les nouveaux messages sont plus récents que " +
+      "tout le résumé existant et le corrigent si nécessaire.",
     messageLine: (name, content) => `${name} : ${content}`,
     emptySummaryError: "le serveur a renvoyé un résumé vide",
     truncatedSummaryError: "le serveur a renvoyé un résumé tronqué",
+    stalledSummaryError: "la reconstruction du résumé n'a pas progressé",
   },
 
   emotion: {

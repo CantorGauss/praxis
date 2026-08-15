@@ -132,8 +132,13 @@ export function renderTranscript(
 export type SceneBlockOptions = {
   speakerName: string;
   speakerGender?: SceneGender;
-  /** Les autres personnages présents, avec leur accord grammatical. */
-  others: { name: string; gender: SceneGender }[];
+  /** Les autres personnages présents, avec leur identité publique. */
+  others: {
+    name: string;
+    gender: SceneGender;
+    /** Une ligne issue de la fiche, distincte du prompt de personnalité. */
+    description?: string | null;
+  }[];
   userName?: string;
   userGender?: SceneGender;
   /** À qui s'adresse le dernier message ; calculé par le directeur. */

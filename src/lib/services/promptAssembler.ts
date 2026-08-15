@@ -30,8 +30,13 @@ export type SceneInput = {
   speakerName: string;
   speakerGender: SceneGender;
   otherNames: string[];
-  /** Les autres personnages, avec leur accord grammatical. */
-  others: { name: string; gender: SceneGender }[];
+  /** Les autres personnages, avec leur identité publique et leur accord grammatical. */
+  others: {
+    name: string;
+    gender: SceneGender;
+    /** Courte description visible dans la fiche ; jamais le prompt interne. */
+    description?: string | null;
+  }[];
   userGender?: SceneGender;
   label: MessageLabeller;
   addresseeLabel?: AddresseeLabeller;

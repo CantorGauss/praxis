@@ -262,7 +262,13 @@ describe("buildSceneBlock", () => {
       {
         speakerName: "Anna",
         speakerGender: "feminine",
-        others: [{ name: "Marc", gender: "masculine" }],
+        others: [
+          {
+            name: "Marc",
+            gender: "masculine",
+            description: "Frère aîné d'Anna, médecin urgentiste",
+          },
+        ],
         userName: "Jeff",
         userGender: "masculine",
       },
@@ -272,9 +278,26 @@ describe("buildSceneBlock", () => {
     expect(block).toContain("Tu es Anna, et uniquement Anna.");
     expect(block).toContain("- Jeff — la personne humaine");
     expect(block).toContain("- Marc — un autre personnage");
+    expect(block).toContain("Frère aîné d'Anna, médecin urgentiste");
     expect(block).toContain("- Anna — toi.");
     expect(block).toContain("ne confonds jamais Jeff et Marc");
     expect(block).not.toContain("Utilisateur");
+  });
+
+  it("ne partage que l'identité publique, sans inventer de description", () => {
+    const block = buildSceneBlock(
+      {
+        speakerName: "Anna",
+        speakerGender: "feminine",
+        others: [
+          { name: "Marc", gender: "masculine", description: "   " },
+        ],
+        userName: "Jeff",
+      },
+      FR,
+    );
+    expect(block).toContain("- Marc — un autre personnage de la scène.");
+    expect(block).not.toContain("scène : .");
   });
 
   it("dresse le même trombinoscope en anglais", () => {

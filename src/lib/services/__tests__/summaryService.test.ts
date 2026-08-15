@@ -1,17 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  chatCompletion: vi.fn(),
+  updateConversation: vi.fn(),
+}));
+
+vi.mock("../llmClient", async () => {
+  const actual = await vi.importActual<typeof import("../llmClient")>(
+    "../llmClient",
+  );
+  return { ...actual, chatCompletion: mocks.chatCompletion };
+});
+
+vi.mock("../repositories", () => ({
+  conversationRepo: { update: mocks.updateConversation },
+}));
+
 import {
   needsSummary,
+  rebuildSummary,
+  limitSummaryBullets,
   uncoveredMessages,
   updateSummary,
   KEEP_RECENT_MESSAGES,
+  MAX_SUMMARY_BATCH,
   MIN_SUMMARY_BATCH,
   SUMMARY_FORMAT_MARKER,
+  SUMMARY_MAX_BULLETS,
+  SUMMARY_MAX_OUTPUT_TOKENS,
   summaryRequestParameters,
   summaryLooksTruncated,
   summaryNeedsRefresh,
 } from "../summaryService";
 import type { ConnectionTarget, Conversation } from "../../types";
 import type { Message } from "../../types";
+import { frPrompts } from "../../i18n/prompts";
 
 function message(id: string, content = "contenu"): Message {
   return {
@@ -97,6 +120,7 @@ describe("summaryNeedsRefresh", () => {
       false,
     );
     expect(summaryNeedsRefresh(null)).toBe(false);
+    expect(summaryNeedsRefresh("[ACTIVE MEMORY v3]\nÉTAT ACTUEL\n...")).toBe(true);
   });
 
   it("repère une dernière puce coupée", () => {
@@ -108,6 +132,29 @@ describe("summaryNeedsRefresh", () => {
         `${SUMMARY_FORMAT_MARKER}\n**ÉTAT ACTUEL**\n* Leur relation est amicale.`,
       ),
     ).toBe(false);
+  });
+});
+
+describe("limitSummaryBullets", () => {
+  it("supprime les puces excédentaires et leur rubrique devenue vide", () => {
+    const summary = [
+      "**ÉTAT ACTUEL**",
+      ...Array.from({ length: SUMMARY_MAX_BULLETS }, (_, i) => `- Fait ${i + 1}.`),
+      "",
+      "**ÉVÉNEMENTS RÉCENTS IMPORTANTS**",
+      "- Ancien détail de trop.",
+    ].join("\n");
+
+    const limited = limitSummaryBullets(summary);
+
+    expect(limited.match(/^- /gm)).toHaveLength(SUMMARY_MAX_BULLETS);
+    expect(limited).not.toContain("Ancien détail de trop");
+    expect(limited).not.toContain("ÉVÉNEMENTS RÉCENTS IMPORTANTS");
+  });
+
+  it("laisse intact un résumé déjà dans le budget", () => {
+    const summary = "**ÉTAT ACTUEL**\n- Situation active.";
+    expect(limitSummaryBullets(summary)).toBe(summary);
   });
 });
 
@@ -164,6 +211,11 @@ describe("updateSummary", () => {
     timeoutMs: 120_000,
   };
 
+  beforeEach(() => {
+    mocks.chatCompletion.mockReset();
+    mocks.updateConversation.mockReset();
+  });
+
   it("distingue « rien à résumer » d'un échec", async () => {
     // Moins de messages que la fenêtre conservée : il n'y a rien à couvrir.
     // Ce n'est pas un incident, et l'utilisateur ne doit pas être alerté.
@@ -172,5 +224,76 @@ describe("updateSummary", () => {
     );
     const outcome = await updateSummary(connection, "m", conversation, messages);
     expect(outcome).toEqual({ ok: false, reason: null });
+  });
+
+  it("borne la sortie et demande explicitement d'expirer les anciens éléments", async () => {
+    mocks.chatCompletion.mockResolvedValue(
+      "**ÉTAT ACTUEL**\n- La scène se déroule dans la cuisine.",
+    );
+    const messages = Array.from(
+      { length: KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH },
+      (_, i) => message(String(i)),
+    );
+
+    const outcome = await updateSummary(connection, "m", conversation, messages);
+
+    expect(outcome.ok).toBe(true);
+    expect(mocks.updateConversation).toHaveBeenCalledTimes(1);
+    const body = mocks.chatCompletion.mock.calls[0][1];
+    expect(body.max_tokens).toBe(SUMMARY_MAX_OUTPUT_TOKENS);
+    expect(body.messages[0].content).toContain(
+      `Absolute limit: ${SUMMARY_MAX_BULLETS} bullets`,
+    );
+    expect(body.messages[0].content).toContain(
+      "Age without a current consequence is a reason to forget it",
+    );
+  });
+
+  it("reconstruit tous les anciens messages, au-delà du premier lot", async () => {
+    mocks.chatCompletion.mockResolvedValue(
+      "**ÉTAT ACTUEL**\n- La situation la plus récente reste active.",
+    );
+    const messages = Array.from({ length: 70 }, (_, i) => message(String(i)));
+    const progress: number[] = [];
+
+    const outcome = await rebuildSummary(
+      connection,
+      "m",
+      { ...conversation, summary: "ancien résumé à préserver jusqu'au succès" },
+      messages,
+      undefined,
+      {},
+      frPrompts,
+      ({ remainingMessages }) => progress.push(remainingMessages),
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(mocks.chatCompletion).toHaveBeenCalledTimes(3);
+    expect(mocks.updateConversation).toHaveBeenCalledTimes(1);
+    expect(outcome.conversation.summaryThroughMessageId).toBe("55");
+    expect(progress).toEqual([
+      70 - KEEP_RECENT_MESSAGES,
+      70 - KEEP_RECENT_MESSAGES - MAX_SUMMARY_BATCH,
+      8,
+      0,
+    ]);
+  });
+
+  it("conserve l'ancien résumé si un lot de reconstruction échoue", async () => {
+    mocks.chatCompletion
+      .mockResolvedValueOnce("**ÉTAT ACTUEL**\n- Premier lot valide.")
+      .mockRejectedValueOnce(new Error("serveur indisponible"));
+    const messages = Array.from({ length: 70 }, (_, i) => message(String(i)));
+
+    const outcome = await rebuildSummary(
+      connection,
+      "m",
+      { ...conversation, summary: "résumé encore valable" },
+      messages,
+    );
+
+    expect(outcome).toEqual({ ok: false, reason: "serveur indisponible" });
+    expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 });

@@ -66,7 +66,12 @@ export type ScenePrompts = {
 export type SceneBlockText = {
   speakerName: string;
   speakerGender: Gender;
-  others: { name: string; gender: Gender }[];
+  others: {
+    name: string;
+    gender: Gender;
+    /** Identité publique courte ; null quand la fiche n'en indique aucune. */
+    description?: string | null;
+  }[];
   userName: string;
   userGender: Gender;
 };
@@ -113,12 +118,13 @@ export type DirectorPrompts = {
 };
 
 export type SummaryPrompts = {
-  system(): string;
+  system(input: { maxBullets: number }): string;
   user(input: { previousSummary: string | null; newMessages: string }): string;
   /** Ligne d'un message soumis au résumé. */
   messageLine(name: string, content: string): string;
   emptySummaryError: string;
   truncatedSummaryError: string;
+  stalledSummaryError: string;
 };
 
 export type EmotionPrompts = {

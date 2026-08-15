@@ -38,15 +38,54 @@ export const MIN_SUMMARY_BATCH = 8;
 export const MAX_SUMMARY_BATCH = 24;
 
 /**
+ * Le résumé est une mémoire de travail, pas une archive. Un plafond explicite
+ * force le modèle à arbitrer entre les éléments au lieu de recopier indéfiniment
+ * ce qui figurait déjà dans la version précédente.
+ */
+export const SUMMARY_MAX_BULLETS = 12;
+export const SUMMARY_MAX_OUTPUT_TOKENS = 900;
+
+const SUMMARY_BULLET = /^\s*(?:[-*•]|\d+[.)])\s+/;
+
+/**
+ * Filet de sécurité pour les serveurs qui ignorent la limite demandée. Les
+ * rubriques sont ordonnées de la plus utile à la plus périssable dans le
+ * prompt ; couper la fin retire donc d'abord les événements récents en trop.
+ */
+export function limitSummaryBullets(
+  summary: string,
+  maxBullets = SUMMARY_MAX_BULLETS,
+): string {
+  if (maxBullets < 1) return "";
+  const lines = summary.split("\n");
+  let count = 0;
+  let cutoff = lines.length;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!SUMMARY_BULLET.test(lines[i])) continue;
+    count += 1;
+    if (count > maxBullets) {
+      cutoff = i;
+      break;
+    }
+  }
+  if (cutoff === lines.length) return summary;
+
+  const kept = lines.slice(0, cutoff);
+  const lastBullet = kept.findLastIndex((line) => SUMMARY_BULLET.test(line));
+  return kept.slice(0, lastBullet + 1).join("\n").trimEnd();
+}
+
+/**
  * Marqueur applicatif : permet de reconstruire une fois les anciens résumés.
  *
  * Volontairement hors des packs de langue. Un marqueur traduit changerait à
  * chaque bascule de langue et ferait passer pour périmé un résumé qui ne l'est
  * pas. La v3 succède au marqueur français `[MÉMOIRE ACTIVE v2]` : les résumés
  * antérieurs sont réécrits une fois, ce qui est de toute façon nécessaire
- * puisque leurs rubriques étaient en français.
+ * puisque leurs rubriques étaient en français. La v4 introduit une vraie
+ * politique d'expiration et force donc une nouvelle reconstruction des v3.
  */
-export const SUMMARY_FORMAT_MARKER = "[ACTIVE MEMORY v3]";
+export const SUMMARY_FORMAT_MARKER = "[ACTIVE MEMORY v4]";
 
 /** Détecte notamment une dernière puce coupée en plein milieu. */
 export function summaryLooksTruncated(summary: string): boolean {
@@ -115,6 +154,17 @@ export type SummaryOutcome =
   /** `reason: null` = il n'y avait rien à résumer, ce n'est pas un échec. */
   | { ok: false; reason: string | null };
 
+export type SummaryUpdateOptions = {
+  /** Faux pendant une reconstruction : l'ancien résumé reste intact jusqu'au succès total. */
+  persist?: boolean;
+};
+
+export type SummaryRebuildProgress = {
+  processedMessages: number;
+  remainingMessages: number;
+  totalMessages: number;
+};
+
 /**
  * Les tâches internes n'ont pas besoin d'un raisonnement caché. OpenRouter
  * reçoit le même ordre `none` que les réponses principales.
@@ -139,6 +189,7 @@ export async function updateSummary(
   /** Paramètres du profil de modèle (désactivation du raisonnement, etc.). */
   extraParameters: Record<string, unknown> = {},
   pack: PromptPack = DEFAULT_PROMPT_PACK,
+  options: SummaryUpdateOptions = {},
 ): Promise<SummaryOutcome> {
   const rebuilding = summaryNeedsRefresh(conversation.summary);
   const uncovered = rebuilding
@@ -163,11 +214,14 @@ export async function updateSummary(
       ...requestParameters,
       model: modelId,
       temperature: 0.2,
-      // Certains modèles dépensent une partie du budget en raisonnement. Une
-      // marge confortable évite de couper la mémoire après deux lignes.
-      max_tokens: 2000,
+      // Le plafond force une mémoire de travail compacte. Les paramètres
+      // ci-dessus coupent déjà le raisonnement caché, qui ne doit pas le manger.
+      max_tokens: SUMMARY_MAX_OUTPUT_TOKENS,
       messages: [
-        { role: "system", content: pack.summary.system() },
+        {
+          role: "system",
+          content: pack.summary.system({ maxBullets: SUMMARY_MAX_BULLETS }),
+        },
         {
           role: "user",
           content: pack.summary.user({
@@ -178,7 +232,7 @@ export async function updateSummary(
         },
       ],
     });
-    const body = text.trim();
+    const body = limitSummaryBullets(text.trim());
     if (!body) return { ok: false, reason: pack.summary.emptySummaryError };
     if (summaryLooksTruncated(body)) {
       return { ok: false, reason: pack.summary.truncatedSummaryError };
@@ -191,10 +245,84 @@ export async function updateSummary(
       summary,
       summaryThroughMessageId: toSummarize[toSummarize.length - 1].id,
     };
-    await conversationRepo.update(updated);
+    if (options.persist !== false) await conversationRepo.update(updated);
     return { ok: true, conversation: updated };
   } catch (e) {
     // Jamais bloquant pour le chat : on remonte la cause, on ne la masque pas.
+    return { ok: false, reason: String(e).replace(/^Error:\s*/, "") };
+  }
+}
+
+/**
+ * Reconstruit toute la mémoire condensable, par lots chronologiques.
+ *
+ * `updateSummary` ne traite volontairement qu'un lot par tour automatique. Une
+ * reconstruction manuelle doit au contraire aller jusqu'au bout : auparavant,
+ * elle s'arrêtait après les 24 messages les plus anciens puis annonçait un
+ * succès. Les résultats intermédiaires restent en mémoire et ne sont persistés
+ * qu'une fois la reconstruction complète, afin qu'un échec conserve l'ancien
+ * résumé intact.
+ */
+export async function rebuildSummary(
+  connection: ConnectionTarget,
+  modelId: string,
+  conversation: Conversation,
+  messages: Message[],
+  label: MessageLabeller = roleLabeller,
+  extraParameters: Record<string, unknown> = {},
+  pack: PromptPack = DEFAULT_PROMPT_PACK,
+  onProgress?: (progress: SummaryRebuildProgress) => void,
+): Promise<SummaryOutcome> {
+  const totalMessages = Math.max(0, messages.length - KEEP_RECENT_MESSAGES);
+  if (totalMessages === 0) return { ok: false, reason: null };
+
+  let working: Conversation = {
+    ...conversation,
+    summary: null,
+    summaryThroughMessageId: null,
+  };
+  let remainingMessages = totalMessages;
+  onProgress?.({
+    processedMessages: 0,
+    remainingMessages,
+    totalMessages,
+  });
+
+  while (remainingMessages > 0) {
+    const previousBoundary = working.summaryThroughMessageId;
+    const outcome = await updateSummary(
+      connection,
+      modelId,
+      working,
+      messages,
+      label,
+      extraParameters,
+      pack,
+      { persist: false },
+    );
+    if (!outcome.ok) return outcome;
+    working = outcome.conversation;
+
+    const uncovered = uncoveredMessages(messages, working.summaryThroughMessageId);
+    const nextRemaining = Math.max(0, uncovered.length - KEEP_RECENT_MESSAGES);
+    if (
+      working.summaryThroughMessageId === previousBoundary ||
+      nextRemaining >= remainingMessages
+    ) {
+      return { ok: false, reason: pack.summary.stalledSummaryError };
+    }
+    remainingMessages = nextRemaining;
+    onProgress?.({
+      processedMessages: totalMessages - remainingMessages,
+      remainingMessages,
+      totalMessages,
+    });
+  }
+
+  try {
+    await conversationRepo.update(working);
+    return { ok: true, conversation: working };
+  } catch (e) {
     return { ok: false, reason: String(e).replace(/^Error:\s*/, "") };
   }
 }

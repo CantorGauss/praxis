@@ -334,7 +334,13 @@ describe("assemblePrompt en scène de groupe", () => {
     speakerName: "Anna",
     speakerGender: "feminine" as const,
     otherNames: ["Marc"],
-    others: [{ name: "Marc", gender: "masculine" as const }],
+    others: [
+      {
+        name: "Marc",
+        gender: "masculine" as const,
+        description: "Frère aîné d'Anna, médecin urgentiste",
+      },
+    ],
     label,
   };
 
@@ -354,6 +360,8 @@ describe("assemblePrompt en scène de groupe", () => {
       last = idx;
     }
     expect(result.system).toContain("Tu es Anna, et uniquement Anna.");
+    expect(result.system).toContain("Frère aîné d'Anna, médecin urgentiste");
+    expect(result.system).not.toContain("prompt interne");
   });
 
   it("met la consigne de destinataire en fin de requête, pas dans le système", () => {

@@ -36,6 +36,7 @@ import { applyDecay, neutralState } from "../services/emotion";
 import { assemblePrompt, type SceneInput } from "../services/promptAssembler";
 import {
   needsSummary,
+  rebuildSummary,
   uncoveredMessages,
   updateSummary,
   KEEP_RECENT_MESSAGES,
@@ -1351,7 +1352,14 @@ class AppState {
             speakerName: speaker.name,
             speakerGender: speaker.gender,
             otherNames,
-            others: others.map((p) => ({ name: p.name, gender: p.gender })),
+            // Le trombinoscope partage seulement l'identité publique courte :
+            // le prompt interne, les traits et l'état émotionnel restent propres
+            // à chaque personnage.
+            others: others.map((p) => ({
+              name: p.name,
+              gender: p.gender,
+              description: p.description,
+            })),
             userGender: this.settings.userGender,
             label: this.labelFor,
             addresseeLabel: this.addresseeLabelFor(speaker.id),
@@ -1585,14 +1593,20 @@ class AppState {
       messages.length - KEEP_RECENT_MESSAGES,
     );
     try {
-      const outcome = await updateSummary(
+      const outcome = await rebuildSummary(
         target,
         modelId,
-        { ...conv, summary: null, summaryThroughMessageId: null },
+        conv,
         messages,
         this.labelFor,
         profile.customParameters,
         this.pack,
+        ({ remainingMessages }) => {
+          this.summaryPendingMessages = Math.min(
+            MAX_SUMMARY_BATCH,
+            remainingMessages,
+          );
+        },
       );
       if (!outcome.ok) {
         const reason = outcome.reason?.replace(/[.\s]+$/, "");
