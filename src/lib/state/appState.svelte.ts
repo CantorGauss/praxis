@@ -70,6 +70,7 @@ import {
   resolveContextBudget,
   type ContextBudget,
 } from "../services/inference";
+import { createFrameBatcher } from "../services/frameBatcher";
 
 export type View = "chat" | "new-chat" | "personas" | "settings";
 
@@ -92,6 +93,12 @@ class AppState {
 
   personas = $state<Persona[]>([]);
   conversations = $state<Conversation[]>([]);
+  private personaIndex = $derived(
+    new Map(this.personas.map((persona) => [persona.id, persona])),
+  );
+  private conversationIndex = $derived(
+    new Map(this.conversations.map((conversation) => [conversation.id, conversation])),
+  );
   /** Serveurs configurés ; la bascule de l'un à l'autre est immédiate. */
   connections = $state<Connection[]>([]);
   /** Modèles annoncés par la connexion active, et par elle seule. */
@@ -189,9 +196,15 @@ class AppState {
   notice = $state<string | null>(null);
 
   get currentConversation(): Conversation | null {
-    return (
-      this.conversations.find((c) => c.id === this.currentConversationId) ?? null
-    );
+    return this.conversationById(this.currentConversationId);
+  }
+
+  personaById(id: string | null | undefined): Persona | null {
+    return id ? (this.personaIndex.get(id) ?? null) : null;
+  }
+
+  conversationById(id: string | null | undefined): Conversation | null {
+    return id ? (this.conversationIndex.get(id) ?? null) : null;
   }
 
   /** Persona principale : en-tête, réglages par défaut, avatar de la liste. */
@@ -199,7 +212,7 @@ class AppState {
     const conv = this.currentConversation;
     const id = conv?.personaId ?? this.settings.defaultPersonaId;
     return (
-      this.personas.find((p) => p.id === id) ??
+      this.personaById(id) ??
       (this.personas.length ? this.personas[0] : null)
     );
   }
@@ -211,7 +224,7 @@ class AppState {
   get participants(): Persona[] {
     if (!this.currentConversationId) return [];
     return this.participantIds
-      .map((id) => this.personas.find((p) => p.id === id))
+      .map((id) => this.personaById(id))
       .filter((p): p is Persona => Boolean(p));
   }
 
@@ -381,9 +394,7 @@ class AppState {
   labelFor = (message: Message): string => {
     if (message.kind === "narration") return t().app.narrationSpeaker;
     if (message.role === "user") return this.userName;
-    const persona = message.personaId
-      ? this.personas.find((p) => p.id === message.personaId)
-      : undefined;
+    const persona = this.personaById(message.personaId);
     return persona?.name ?? message.personaName ?? this.pack.scene.unknownSpeakerLabel;
   };
 
@@ -397,14 +408,14 @@ class AppState {
       if (!target || target === message.personaId) return null;
       if (target === readerId) return "toi";
       if (target === USER_ADDRESSEE) return this.userName;
-      return this.personas.find((p) => p.id === target)?.name ?? null;
+      return this.personaById(target)?.name ?? null;
     };
   }
 
   personaNamesOf(conversationId: string): string[] {
     const ids = this.participantsByConversation[conversationId] ?? [];
     return ids
-      .map((id) => this.personas.find((p) => p.id === id)?.name)
+      .map((id) => this.personaById(id)?.name)
       .filter((n): n is string => Boolean(n));
   }
 
@@ -717,7 +728,7 @@ class AppState {
     react = true,
   ): Promise<void> {
     const conv = this.currentConversation;
-    const persona = this.personas.find((p) => p.id === personaId);
+    const persona = this.personaById(personaId);
     if (!conv || !persona) return;
     if (this.streaming || this.turnInProgress) {
       this.pendingSceneActions = [
@@ -749,7 +760,7 @@ class AppState {
     react = true,
   ): Promise<void> {
     const conv = this.currentConversation;
-    const persona = this.personas.find((p) => p.id === personaId);
+    const persona = this.personaById(personaId);
     if (!conv || !persona) return;
     if (this.streaming || this.turnInProgress) {
       this.pendingSceneActions = [
@@ -824,7 +835,7 @@ class AppState {
     const states: Record<string, EmotionalState> = {};
     const variants: Record<string, AvatarVariant[]> = {};
     for (const personaId of targets) {
-      const persona = this.personas.find((p) => p.id === personaId);
+      const persona = this.personaById(personaId);
       if (!persona) continue;
       const stored = (await emotionRepo.get(personaId)) ?? neutralState(personaId, now);
       const temporal = buildTemporalContext(now, stored.updatedAt, this.pack);
@@ -1254,8 +1265,8 @@ class AppState {
     for (const speakerId of speakerIds) {
       if (this.turnAborted) return false;
       this.pendingSpeakerIds = this.pendingSpeakerIds.filter((id) => id !== speakerId);
-      const conv = this.conversations.find((c) => c.id === conversationId);
-      const speaker = this.personas.find((p) => p.id === speakerId);
+      const conv = this.conversationById(conversationId);
+      const speaker = this.personaById(speakerId);
       if (!conv || !speaker) continue;
       if (!this.target) {
         this.errorBanner = t().app.noConnection;
@@ -1489,10 +1500,23 @@ class AppState {
 
     return new Promise<boolean>((resolve) => {
       let settled = false;
+      let rawContent = "";
+      const publishStreamingContent = () => {
+        this.streamingContent = rawContent;
+        this.messages = this.messages.map((message) =>
+          message.id === assistantMessage.id
+            ? { ...message, content: rawContent }
+            : message,
+        );
+      };
+      const streamUpdates = createFrameBatcher(publishStreamingContent);
       const finalize = async (status: "complete" | "cancelled" | "error") => {
         if (settled) return;
         settled = true;
-        const raw = this.streamingContent;
+        // Une fin SSE peut arriver avant la prochaine frame : la dernière rafale
+        // doit être visible et persistée avant de clore le message.
+        streamUpdates.flush();
+        const raw = rawContent;
         const content = scene
           ? cleanSpeakerReply(raw, speaker.name, otherNames, this.userName)
           : raw;
@@ -1537,11 +1561,8 @@ class AppState {
 
       streamChat(target, requestId, body, {
         onDelta: (delta) => {
-          this.streamingContent += delta;
-          const partial = this.streamingContent;
-          this.messages = this.messages.map((m) =>
-            m.id === assistantMessage.id ? { ...m, content: partial } : m,
-          );
+          rawContent += delta;
+          streamUpdates.schedule();
         },
         onDone: () => void finalize("complete"),
         onCancelled: () => void finalize("cancelled"),
@@ -1574,7 +1595,7 @@ class AppState {
       this.notice = t().app.waitBeforeRebuildingSummary;
       return;
     }
-    const conv = this.conversations.find((c) => c.id === conversationId);
+    const conv = this.conversationById(conversationId);
     const modelId = this.activeModelId;
     const target = this.target;
     if (!conv || !modelId || !target) {
@@ -1630,7 +1651,7 @@ class AppState {
    *  tant que la conversation n'a pas réellement avancé. */
   private async maybeSummarize(conversationId: string): Promise<void> {
     if (this.summarizing) return;
-    const conv = this.conversations.find((c) => c.id === conversationId);
+    const conv = this.conversationById(conversationId);
     const modelId = this.activeModelId;
     const target = this.target;
     if (!conv || !modelId || !target) return;
@@ -1734,7 +1755,7 @@ class AppState {
     const last = this.messages[this.messages.length - 1];
     if (!last || last.role !== "assistant") return;
     const speaker =
-      this.personas.find((p) => p.id === last.personaId) ?? this.activePersona;
+      this.personaById(last.personaId) ?? this.activePersona;
     if (!speaker) return;
     const modelId = this.activeModelId;
     if (!modelId) return;

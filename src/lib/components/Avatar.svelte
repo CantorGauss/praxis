@@ -31,7 +31,7 @@
 
   const persona = $derived(
     personaId
-      ? (app.personas.find((p) => p.id === personaId) ?? null)
+      ? app.personaById(personaId)
       : app.activePersona,
   );
   const seed = $derived(persona?.id ?? fallbackName ?? "");

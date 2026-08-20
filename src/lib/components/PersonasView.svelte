@@ -41,7 +41,7 @@
   let showAvatarPicker = $state(false);
   let showTemplates = $state(false);
   const selectedPersona = $derived(
-    app.personas.find((p) => p.id === selectedId) ?? null,
+    app.personaById(selectedId),
   );
 
   $effect(() => {

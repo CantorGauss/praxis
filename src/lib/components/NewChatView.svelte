@@ -18,7 +18,7 @@
 
   const cast = $derived(
     selected
-      .map((id) => app.personas.find((p) => p.id === id))
+      .map((id) => app.personaById(id))
       .filter((p): p is Persona => Boolean(p)),
   );
 

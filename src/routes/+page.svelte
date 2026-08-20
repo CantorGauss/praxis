@@ -8,8 +8,6 @@
   import ChatView from "../lib/components/ChatView.svelte";
   import CastPanel from "../lib/components/CastPanel.svelte";
   import NewChatView from "../lib/components/NewChatView.svelte";
-  import PersonasView from "../lib/components/PersonasView.svelte";
-  import SettingsView from "../lib/components/SettingsView.svelte";
   import Onboarding from "../lib/components/Onboarding.svelte";
   import CurtainView from "../lib/components/CurtainView.svelte";
   import { t } from "../lib/i18n/ui.svelte";
@@ -20,6 +18,27 @@
   // Le thème sombre évite un flash clair avant la première lecture de la
   // préférence système ; `syncSystemTheme` corrige la valeur dès le montage.
   let systemPrefersDark = $state(true);
+  let PersonasView = $state<
+    typeof import("../lib/components/PersonasView.svelte").default | null
+  >(null);
+  let SettingsView = $state<
+    typeof import("../lib/components/SettingsView.svelte").default | null
+  >(null);
+
+  // Ces deux écrans lourds ne participent pas au premier rendu. Vite les place
+  // dans des chunks séparés, chargés seulement à leur première ouverture.
+  $effect(() => {
+    if (app.view === "personas" && !PersonasView) {
+      void import("../lib/components/PersonasView.svelte").then(
+        (module) => (PersonasView = module.default),
+      );
+    }
+    if (app.view === "settings" && !SettingsView) {
+      void import("../lib/components/SettingsView.svelte").then(
+        (module) => (SettingsView = module.default),
+      );
+    }
+  });
 
   $effect(() => {
     applyUiAppearance(
@@ -73,9 +92,17 @@
     {:else if app.view === "new-chat"}
       <NewChatView />
     {:else if app.view === "personas"}
-      <PersonasView />
+      {#if PersonasView}
+        <PersonasView />
+      {:else}
+        <div class="loading">{s.common.loading}</div>
+      {/if}
     {:else}
-      <SettingsView />
+      {#if SettingsView}
+        <SettingsView />
+      {:else}
+        <div class="loading">{s.common.loading}</div>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -89,6 +116,7 @@
 
   .loading,
   .fatal {
+    flex: 1;
     height: 100vh;
     display: flex;
     flex-direction: column;

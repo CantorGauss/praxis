@@ -65,7 +65,7 @@
 </aside>
 
 {#if confirmDeleteId}
-  {@const conv = app.conversations.find((c) => c.id === confirmDeleteId)}
+    {@const conv = app.conversationById(confirmDeleteId)}
   <div class="modal-backdrop" role="presentation" {...backdrop(() => (confirmDeleteId = null))}>
     <div class="modal" role="dialog" tabindex="-1">
       <h3>{s.sidebar.deleteConversationTitle}</h3>

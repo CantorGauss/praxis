@@ -100,7 +100,7 @@
         <strong>{s.cast.afterCurrentTurn}</strong>
         {#each app.pendingSceneActions as action}
           {@const who =
-            app.personas.find((p) => p.id === action.personaId)?.name ??
+            app.personaById(action.personaId)?.name ??
             s.cast.theCharacter}
           <span>
             {action.kind === "enter"
