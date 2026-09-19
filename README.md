@@ -122,35 +122,119 @@ and timeout. Switching is one click in the header.
 API keys go in your system keychain, one per connection. Never in the database,
 never in an export. Delete a connection and its key goes with it.
 
-## Getting it running
+## Run it from source
 
-You'll need [Node.js](https://nodejs.org) 20+, a stable
-[Rust](https://rustup.rs) toolchain, and the Xcode Command Line Tools on macOS
-(Tauri's WebKitGTK packages on Linux).
+Praxis is a [Tauri 2](https://v2.tauri.app) desktop application. Every platform
+needs [Git](https://git-scm.com), [Node.js](https://nodejs.org) 20 or newer, and
+the stable [Rust toolchain](https://rustup.rs). Install the platform dependencies
+below, then clone the project and install its JavaScript packages:
 
 ```bash
 git clone https://github.com/CantorGauss/praxis.git
+cd praxis
+npm install
 ```
+
+The first launch walks you through the interface and character languages,
+testing your model server, selecting a model, and creating a first character.
+
+### macOS
+
+Praxis supports macOS 10.15 and later. Install the Xcode Command Line Tools if
+they are not already present:
 
 ```bash
-cd praxis && npm install
+xcode-select --install
 ```
 
-On macOS this drops a small `Praxis.app` launcher at the project root — move it
-into `/Applications` if you want:
+Start the app from the repository:
+
+```bash
+npm run tauri -- dev
+```
+
+For a double-clickable development launcher, run:
 
 ```bash
 ./scripts/build-app.sh
 ```
 
-Or just run it:
+This creates `Praxis.app` at the project root. You can move it to `/Applications`,
+but keep the repository in place: the launcher points back to it and runs the
+development build. If it cannot start, its log is at
+`~/Library/Logs/Praxis-launcher.log`.
+
+To build a standalone application bundle instead:
 
 ```bash
-npm run tauri dev
+npm run tauri -- build --bundles app
 ```
 
-First launch walks you through languages, testing your server, picking a model
-and writing a first character.
+### Windows
+
+Install the [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+and select **Desktop development with C++** in the installer. Praxis also needs
+the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/),
+which is already included with Windows 10 version 1803 and later.
+
+Install Rust from PowerShell, restart the terminal, and select the MSVC
+toolchain:
+
+```powershell
+winget install --id Rustlang.Rustup
+rustup default stable-msvc
+```
+
+Then clone and run Praxis:
+
+```powershell
+git clone https://github.com/CantorGauss/praxis.git
+Set-Location praxis
+npm install
+npm run tauri -- dev
+```
+
+Build an `.exe` installer with NSIS:
+
+```powershell
+npm run tauri -- build --bundles nsis
+```
+
+The installer is written below `src-tauri\target\release\bundle\`. An MSI can be
+built with `--bundles msi`; if that build reports a `light.exe` error, enable
+the optional **VBSCRIPT** Windows feature as described in the
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#windows).
+
+### Linux
+
+Install Rust and the native Tauri libraries. On Debian or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+```
+
+Tauri lists the equivalent packages for Arch, Fedora, openSUSE, Alpine, Gentoo,
+and other distributions in its
+[Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
+
+Clone the repository as shown above, then run Praxis:
+
+```bash
+npm run tauri -- dev
+```
+
+Build Debian and AppImage packages with:
+
+```bash
+npm run tauri -- build --bundles deb,appimage
+```
+
+The packages are written below `src-tauri/target/release/bundle/`. Build on the
+same operating system you intend to package; these commands do not cross-compile
+the macOS, Windows, and Linux desktop bundles.
 
 ## Your data
 
@@ -179,8 +263,10 @@ npm run check
 [Tauri 2](https://tauri.app) + [SvelteKit](https://kit.svelte.dev) + TypeScript,
 on Svelte 5 runes. Network calls go through Rust, never straight out of the
 webview. The interesting bits live in [`src/lib/services`](src/lib/services) —
-prompt assembly, mood decay, summarisation, and the multi-character scene logic
-that rewrites the transcript from each speaker's point of view.
+prompt assembly, mood decay, summarisation, speaker selection after every reply,
+and the coordination ledger that tracks intentions, proposals, objections, and
+agreements. The scene logic rewrites the transcript from each speaker's point
+of view.
 
 Translations are in [`src/lib/i18n`](src/lib/i18n). English is the reference
 pack; French is type-checked against it, so a missing key fails the build.
