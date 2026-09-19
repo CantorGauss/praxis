@@ -6,10 +6,8 @@ import type { MessageLabeller, Participant } from "./scene";
 /**
  * Mise en scène confiée au modèle.
  *
- * Le tour de table donne un rythme mécanique : chacun répond, dans l'ordre,
- * toujours. Ici on demande au modèle qui prendrait naturellement la parole —
- * et qui se tairait. Un personnage peut être ignoré, deux peuvent réagir
- * ensemble, personne ne répond quand rien n'appelle de réponse.
+ * Choisit un seul locuteur à la fois. Le choix suivant voit la réplique
+ * réellement produite et les intentions/accords qu'elle a exprimés.
  *
  * La réponse du modèle n'est jamais crue sur parole : seuls des noms de la
  * scène courante sont retenus, sans doublon, et tout échec retombe sur le
@@ -74,6 +72,7 @@ export type DirectorInput = {
   userName: string;
   /** Vrai quand l'utilisateur vient de parler : quelqu'un doit répondre. */
   afterUserMessage: boolean;
+  coordination?: string;
   /** Paramètres du profil de modèle (désactivation du raisonnement, etc.). */
   extraParameters?: Record<string, unknown>;
   /** Langue de jeu ; le directeur écrit dans la même que les personnages. */
@@ -133,14 +132,16 @@ export async function chooseSpeakers(input: DirectorInput): Promise<string[] | n
             content: d.user({
               roster,
               transcript: transcript || d.emptyTranscript,
-            }),
+            }) + (input.coordination ? `\n\n${input.coordination}` : ""),
           },
         ],
       },
     );
     const chosen = parseSpeakerChoice(raw, participants);
-    // Personne ne parle deux fois dans le même tour.
-    return chosen.slice(0, participants.length);
+    // Only an explicit empty array means silence; unusable output is a failure.
+    if (!chosen.length && !/\[\s*\]/.test(raw)) return null;
+    // One utterance at a time; the next choice sees its actual content.
+    return chosen.slice(0, 1);
   } catch {
     // Serveur muet ou trop lent : le tour de table prend le relais.
     return null;

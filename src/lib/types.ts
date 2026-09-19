@@ -122,6 +122,49 @@ export type MessageStatus = "streaming" | "complete" | "cancelled" | "error";
  */
 export type MessageKind = "speech" | "narration";
 
+export type DialogueIntent =
+  | "statement" | "question" | "answer" | "clarification"
+  | "proposal" | "agreement" | "objection" | "conditional" | "withdrawal";
+
+export type ProposalStance = "agree" | "disagree" | "conditional";
+
+/** Observations of a completed utterance, never a character's private reasoning. */
+export type MessageInteraction = {
+  /** Assigned by the application; preserves authorship if a persona is deleted. */
+  actorId?: string;
+  intent: DialogueIntent;
+  addresseeId: string | null;
+  replyToMessageId: string | null;
+  proposal: {
+    text: string;
+    evidence: string;
+    participantIds: string[];
+    replacesId: string | null;
+  } | null;
+  responses: {
+    proposalId: string;
+    stance: ProposalStance;
+    condition: string | null;
+    evidence: string;
+  }[];
+  withdrawal: { proposalId: string; evidence: string } | null;
+};
+
+export type SceneProposal = {
+  id: string;
+  authorId: string;
+  text: string;
+  sourceMessageId: string;
+  participantIds: string[];
+  positions: Record<string, {
+    stance: ProposalStance;
+    condition: string | null;
+    evidence: string;
+    messageId: string;
+  }>;
+  status: "open" | "agreed" | "withdrawn" | "superseded";
+};
+
 export type Message = {
   id: string;
   conversationId: string;
@@ -140,6 +183,8 @@ export type Message = {
    * ou null quand la réplique s'adresse à toute la scène.
    */
   addressee: string | null;
+  /** Absent in older conversations; attached to the source message for replay. */
+  interaction?: MessageInteraction | null;
 };
 
 /** Valeur d'`addressee` désignant l'utilisateur, qui n'est pas une persona. */
@@ -284,8 +329,8 @@ export type AppSettings = {
   /** Accord grammatical employé pour vous. */
   userGender: Gender;
   /**
-   * Qui décide de la prise de parole : `round` fait répondre chacun son tour,
-   * `model` demande au modèle qui parlerait — au prix d'une requête de plus.
+   * `round` privilégie l'ordre de scène, après les interpellations directes.
+   * `model` réévalue le prochain locuteur avant chaque réplique.
    */
   sceneDirector: "round" | "model";
   /** Tours d'échange entre personnages joués automatiquement (0 = aucun). */
@@ -318,7 +363,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   userName: "",
   userGender: "neutral",
-  sceneDirector: "round",
+  sceneDirector: "model",
   sceneAutoRounds: 1,
   idleChatterSeconds: 30,
   historyWindowMessages: 30,

@@ -71,6 +71,7 @@ import {
   type ContextBudget,
 } from "../services/inference";
 import { createFrameBatcher } from "../services/frameBatcher";
+import { analyzeInteraction, collectProposals, coordinationContext } from "../services/coordination";
 
 export type View = "chat" | "new-chat" | "personas" | "settings";
 
@@ -126,6 +127,18 @@ class AppState {
   pendingSpeakerIds = $state<string[]>([]);
   private streamRequestId: string | null = null;
   private turnAborted = false;
+  private sceneSettled = false;
+  private interactionAttempts = new Set<string>();
+
+  get proposals() {
+    return collectProposals(this.messages);
+  }
+
+  private get coordination(): string {
+    return coordinationContext(this.messages, [
+      ...this.roster, { id: USER_ADDRESSEE, name: this.userName },
+    ], this.pack);
+  }
 
   /** Destinataire imposé depuis la zone de saisie ; null = laisser le directeur choisir. */
   composerTargetId = $state<string | null>(null);
@@ -190,6 +203,8 @@ class AppState {
    * ni tours enchaînés. Les personnages n'ouvrent la bouche que sur demande.
    */
   idlePaused = $state(false);
+  /** L'utilisateur laisse explicitement les personnages échanger sans limite de tours. */
+  userSilent = $state(false);
 
   temperatureOverride = $state<number | null>(null);
   errorBanner = $state<string | null>(null);
@@ -461,9 +476,10 @@ class AppState {
     return (
       !this.streaming &&
       this.participants.length > 1 &&
-      this.messages.length > 0 &&
-      this.consecutiveAiTurns <
-        this.participants.length * MAX_CONSECUTIVE_AI_TURNS
+      (this.userSilent ||
+        (this.messages.length > 0 &&
+          this.consecutiveAiTurns <
+            this.participants.length * MAX_CONSECUTIVE_AI_TURNS))
     );
   }
 
@@ -565,6 +581,8 @@ class AppState {
   // -------------------------------------------------------------------------
 
   async openConversation(id: string): Promise<void> {
+    if (this.userSilent) this.reclaimFloor();
+    this.turnAborted = true;
     this.cancelIdleChatter();
     // Un message en attente appartient à la scène où il a été écrit ; il ne
     // doit pas suivre l'utilisateur dans une autre conversation.
@@ -572,6 +590,7 @@ class AppState {
     this.pendingSceneActions = [];
     if (this.streaming) await this.cancelGeneration();
     this.currentConversationId = id;
+    this.interactionAttempts.clear();
     this.messages = await messageRepo.list(id);
     this.lastPromptTokens = null;
     this.lastPromptContextTokens = null;
@@ -589,10 +608,13 @@ class AppState {
 
   /** Rebaisse le rideau : plus aucun salon à l'écran. */
   closeConversation(): void {
+    if (this.userSilent) this.reclaimFloor();
+    this.turnAborted = true;
     this.cancelIdleChatter();
     this.queuedMessage = null;
     this.pendingSceneActions = [];
     this.currentConversationId = null;
+    this.interactionAttempts.clear();
     this.messages = [];
     this.participantIds = [];
     this.composerTargetId = null;
@@ -646,6 +668,7 @@ class AppState {
     if (!conv || personaIds.length === 0) return;
     await participantRepo.replace(conv.id, personaIds);
     this.participantIds = personaIds;
+    if (this.userSilent && !this.isGroupConversation) this.reclaimFloor();
     this.participantsByConversation = {
       ...this.participantsByConversation,
       [conv.id]: personaIds,
@@ -776,6 +799,7 @@ class AppState {
 
     await participantRepo.leave(conv.id, personaId);
     this.participantIds = this.participantIds.filter((id) => id !== personaId);
+    if (this.userSilent && !this.isGroupConversation) this.reclaimFloor();
     this.participantsByConversation = {
       ...this.participantsByConversation,
       [conv.id]: this.participantIds,
@@ -866,6 +890,7 @@ class AppState {
   queueMessage(text: string, mode: "speech" | "scene"): void {
     const content = text.trim();
     if (!content) return;
+    if (this.userSilent) this.reclaimFloor();
     this.queuedMessage = { text: content, mode };
     this.cancelIdleChatter();
   }
@@ -941,6 +966,9 @@ class AppState {
    * l'utilisateur recommence à compter.
    */
   private releaseFloor(): void {
+    if (this.turnAborted || this.errorBanner || !this.isGroupConversation) {
+      this.userSilent = false;
+    }
     if (this.pendingSceneActions.length > 0) {
       setTimeout(() => void this.flushPendingSceneAction(), 0);
       return;
@@ -951,12 +979,13 @@ class AppState {
       setTimeout(() => void this.flushQueuedMessage(), 0);
       return;
     }
-    this.scheduleIdleChatter();
+    if (!this.turnAborted && !this.errorBanner) this.scheduleIdleChatter();
   }
 
   async sendMessage(text: string): Promise<void> {
     const content = text.trim();
     if (!content) return;
+    if (this.userSilent) this.reclaimFloor();
     // La parole n'était pas revenue — la scène a repris juste avant l'envoi.
     // Mettre de côté plutôt que jeter : sans cela le message apparaissait à
     // l'écran sans que personne n'y réponde jamais.
@@ -993,7 +1022,7 @@ class AppState {
 
     conv = await this.titleFromFirstMessage(conv, content);
 
-    await this.runTurns(conv.id, plan.personaIds, this.addressingFor(plan));
+    await this.runTurns(conv.id, plan.personaIds, this.addressingFor(plan), false, plan.reason !== "all");
   }
 
   /**
@@ -1030,6 +1059,7 @@ class AppState {
   async sendSceneEvent(text: string): Promise<void> {
     const content = text.trim();
     if (!content) return;
+    if (this.userSilent) this.reclaimFloor();
     if (this.streaming || this.turnInProgress) {
       this.queueMessage(content, "scene");
       return;
@@ -1052,7 +1082,7 @@ class AppState {
    */
   async continueScene(silent = false): Promise<void> {
     const conv = this.currentConversation;
-    if (!conv || this.streaming || this.turnInProgress) return;
+    if (!conv || !this.userHasFloor) return;
     if (!this.canContinueScene) {
       if (!silent) {
         this.notice = t().app.autoTurnsExhausted;
@@ -1061,24 +1091,39 @@ class AppState {
     }
     const order = planContinuation(this.roster, this.lastSpeakerId());
     if (order.length === 0) return;
+    this.cancelIdleChatter();
+    this.errorBanner = null;
     // La consultation du metteur en scène fait déjà partie du tour autonome :
     // l'utilisateur doit pouvoir la couper comme le reste, et elle doit se
     // dérouler *sous* le verrou — sinon un message envoyé pendant qu'on décide
     // trouvait la scène libre puis se faisait refuser le tour qui suit.
     await this.withTurn(async () => {
       this.autonomousTurn = true;
-      const speakers = await this.decideSpeakers(order.slice(0, 1), {
-        afterUserMessage: false,
-        consultModel: true,
-      });
-      // Personne n'a de raison de parler, ou l'utilisateur a écrit pendant
-      // qu'on décidait : dans les deux cas la scène lui rend la parole plutôt
-      // que d'ouvrir un tour qu'il faudrait aussitôt interrompre.
-      if (speakers.length === 0 || this.queuedMessage) return;
-      await this.playTurn(conv.id, speakers, () =>
-        describeAutonomousTurn(this.userName, this.pack),
+      await this.playTurn(conv.id, order.slice(0, 1), () =>
+        this.userSilent
+          ? this.pack.scene.userSilentTurn(this.userName)
+          : describeAutonomousTurn(this.userName, this.pack),
       );
     });
+  }
+
+  /** Cède la parole jusqu'à une intervention explicite, sans écrire de faux message. */
+  async staySilent(): Promise<void> {
+    if (!this.isGroupConversation || this.queuedMessage || this.pendingSceneActions.length) return;
+    this.userSilent = true;
+    this.idlePaused = false;
+    this.errorBanner = null;
+    this.notice = null;
+    this.cancelIdleChatter();
+    if (this.userHasFloor) await this.continueScene();
+  }
+
+  /** Laisse finir la réplique en cours, puis attend l'utilisateur. */
+  reclaimFloor(): void {
+    this.userSilent = false;
+    this.idlePaused = true;
+    this.cancelIdleChatter();
+    this.interruptScene();
   }
 
   // -------------------------------------------------------------------------
@@ -1087,19 +1132,18 @@ class AppState {
 
   /**
    * Programme la reprise de la scène si l'utilisateur reste silencieux.
-   * Le plafond `MAX_CONSECUTIVE_AI_TURNS` continue de s'appliquer : passé ce
-   * point la minuterie s'arrête, et seul un message la relance.
+   * Le mode « Se taire » enchaîne sans le délai ni le plafond habituels.
    */
   private scheduleIdleChatter(): void {
     this.cancelIdleChatter();
     const seconds = this.settings.idleChatterSeconds;
     // Le silence de l'utilisateur ne compte pas quand il a justement écrit :
     // aucune reprise autonome tant que son message n'est pas parti.
-    if (this.queuedMessage) return;
-    if (this.idlePaused || seconds <= 0 || this.streaming) return;
+    if (this.queuedMessage || this.pendingSceneActions.length || !this.userHasFloor) return;
+    if (this.errorBanner || this.idlePaused || (!this.userSilent && seconds <= 0)) return;
     if (this.participants.length < 2 || !this.canContinueScene) return;
-    const delay = seconds * 1000;
-    this.idleResumeAt = Date.now() + delay;
+    const delay = this.userSilent ? 750 : seconds * 1000;
+    this.idleResumeAt = this.userSilent ? null : Date.now() + delay;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this.idleResumeAt = null;
@@ -1118,6 +1162,10 @@ class AppState {
 
   /** Suspend ou relance la vie autonome de la scène. */
   toggleIdlePause(): void {
+    if (this.userSilent) {
+      this.reclaimFloor();
+      return;
+    }
     this.idlePaused = !this.idlePaused;
     if (this.idlePaused) {
       this.cancelIdleChatter();
@@ -1131,6 +1179,7 @@ class AppState {
    * repousse la reprise plutôt que de lui couper la parole.
    */
   noteUserActivity(): void {
+    if (this.userSilent) return;
     if (this.idleTimer !== null) this.scheduleIdleChatter();
   }
 
@@ -1144,6 +1193,13 @@ class AppState {
     fallback: string[],
     options: { afterUserMessage: boolean; consultModel: boolean },
   ): Promise<string[]> {
+    const last = this.messages[this.messages.length - 1];
+    const recipient = last?.interaction?.addresseeId ?? last?.addressee;
+    const directed = last?.kind === "speech" &&
+      ["question", "clarification", "proposal", "objection", "conditional"].includes(last.interaction?.intent ?? "");
+    if (options.consultModel && directed && recipient && this.participantIds.includes(recipient) && recipient !== last.personaId) {
+      return [recipient];
+    }
     const modelId = this.activeModelId;
     const target = this.target;
     if (
@@ -1153,7 +1209,7 @@ class AppState {
       !target ||
       this.participants.length < 2
     ) {
-      return fallback;
+      return fallback.slice(0, 1);
     }
     this.directing = true;
     try {
@@ -1170,13 +1226,14 @@ class AppState {
         label: this.labelFor,
         userName: this.userName,
         afterUserMessage: options.afterUserMessage,
+        coordination: this.coordination,
         pack: this.pack,
       });
-      if (chosen === null) return fallback;
+      if (chosen === null) return fallback.slice(0, 1);
       // Après un message de l'utilisateur, le silence général serait vécu
       // comme une panne : on rend la main au tour de table.
-      if (chosen.length === 0) return options.afterUserMessage ? fallback : [];
-      return chosen;
+      if (chosen.length === 0) return options.afterUserMessage ? fallback.slice(0, 1) : [];
+      return chosen.slice(0, 1);
     } finally {
       this.directing = false;
     }
@@ -1212,8 +1269,12 @@ class AppState {
     if (this.turnInProgress) return false;
     this.turnInProgress = true;
     this.turnAborted = false;
+    this.sceneSettled = false;
     try {
       await body();
+    } catch (error) {
+      this.errorBanner = String(error);
+      this.turnAborted = true;
     } finally {
       this.pendingSpeakerIds = [];
       this.autonomousTurn = false;
@@ -1229,12 +1290,14 @@ class AppState {
     conversationId: string,
     speakerIds: string[],
     addressing: (speakerId: string) => string,
+    fixedSpeakers = false,
   ): Promise<void> {
     // Pré-vol : le tour qui franchit le seuil profite déjà de la compression,
     // au lieu de retraiter une dernière fois tout l'historique devenu lourd.
     await this.maybeSummarize(conversationId);
-    const completed = await this.playRound(conversationId, speakerIds, addressing);
+    const completed = await this.playRound(conversationId, speakerIds, addressing, fixedSpeakers);
     this.pendingSpeakerIds = [];
+    if (!completed) this.turnAborted = true;
     if (completed) await this.playAutoRounds(conversationId);
     await this.runPostTurnTasks(conversationId);
   }
@@ -1248,10 +1311,11 @@ class AppState {
     speakerIds: string[],
     addressing: (speakerId: string) => string,
     autonomous = false,
+    fixedSpeakers = false,
   ): Promise<void> {
     await this.withTurn(async () => {
       this.autonomousTurn = autonomous;
-      await this.playTurn(conversationId, speakerIds, addressing);
+      await this.playTurn(conversationId, speakerIds, addressing, fixedSpeakers);
     });
   }
 
@@ -1260,11 +1324,30 @@ class AppState {
     conversationId: string,
     speakerIds: string[],
     addressing: (speakerId: string) => string,
+    fixedSpeakers = false,
   ): Promise<boolean> {
-    this.pendingSpeakerIds = [...speakerIds];
-    for (const speakerId of speakerIds) {
-      if (this.turnAborted) return false;
-      this.pendingSpeakerIds = this.pendingSpeakerIds.filter((id) => id !== speakerId);
+    await this.recordLastInteraction(conversationId);
+    // The list gives a reply budget, not a predetermined speaking order.
+    for (let step = 0; step < speakerIds.length; step++) {
+      if (this.turnAborted || this.currentConversationId !== conversationId) return false;
+      if (this.queuedMessage || this.pendingSceneActions.length) return true;
+      const fallback = step === 0 ? speakerIds : planContinuation(this.roster, this.lastSpeakerId());
+      const last = this.messages[this.messages.length - 1];
+      const chosen = fixedSpeakers ? [speakerIds[step]] : await this.decideSpeakers(fallback, {
+        afterUserMessage: step === 0 && last?.role === "user" && last.kind === "speech",
+        consultModel: true,
+      });
+      if (this.turnAborted || this.currentConversationId !== conversationId) return false;
+      if (this.queuedMessage || this.pendingSceneActions.length) return true;
+      // Explicit listening mode keeps its continuous one-line-at-a-time behavior.
+      const speakerId = this.userSilent && this.autonomousTurn
+        ? chosen.find((id) => id !== this.lastSpeakerId()) ?? fallback[0]
+        : chosen[0];
+      if (!speakerId) {
+        this.sceneSettled = true;
+        return true;
+      }
+      this.pendingSpeakerIds = [speakerId];
       const conv = this.conversationById(conversationId);
       const speaker = this.personaById(speakerId);
       if (!conv || !speaker) continue;
@@ -1281,7 +1364,8 @@ class AppState {
         conv,
         speaker,
         modelId,
-        addressing(speakerId),
+        step === 0 || fixedSpeakers ? addressing(speakerId) :
+          this.userSilent ? this.pack.scene.userSilentTurn(this.userName) : describeAutonomousTurn(this.userName, this.pack),
       );
       if (!done) return false;
     }
@@ -1295,7 +1379,7 @@ class AppState {
    */
   private async playAutoRounds(conversationId: string): Promise<void> {
     const rounds = clampAutoRounds(this.settings.sceneAutoRounds);
-    if (this.idlePaused || rounds <= 0 || this.participants.length < 2) return;
+    if (this.sceneSettled || this.userSilent || this.idlePaused || rounds <= 0 || this.participants.length < 2) return;
     // Un message écrit pendant qu'on répondait à l'utilisateur attend déjà son
     // tour : lui faire regarder les personnages bavarder entre eux avant de le
     // lire serait précisément l'attente qu'on cherche à supprimer.
@@ -1304,7 +1388,7 @@ class AppState {
     // moins qu'à la scène, et il peut le couper court.
     this.autonomousTurn = true;
     for (let round = 0; round < rounds; round++) {
-      if (this.turnAborted || this.queuedMessage || !this.canContinueScene) break;
+      if (this.sceneSettled || this.userSilent || this.idlePaused || this.turnAborted || this.queuedMessage || !this.canContinueScene) break;
       const order = planContinuation(this.roster, this.lastSpeakerId());
       if (order.length === 0) break;
       // Le plafond peut tomber en cours de tour : on tronque à ce qui reste.
@@ -1312,19 +1396,46 @@ class AppState {
         this.participants.length * MAX_CONSECUTIVE_AI_TURNS -
         this.consecutiveAiTurns;
       if (budget <= 0) break;
-      const speakers = await this.decideSpeakers(order, {
-        afterUserMessage: false,
-        consultModel: true,
-      });
-      // Le metteur en scène peut juger que la scène est retombée.
-      if (speakers.length === 0) break;
       const completed = await this.playRound(
         conversationId,
-        speakers.slice(0, Math.min(speakers.length, budget)),
+        order.slice(0, budget),
         () => describeAutonomousTurn(this.userName, this.pack),
       );
       this.pendingSpeakerIds = [];
-      if (!completed) break;
+      if (!completed) {
+        this.turnAborted = true;
+        break;
+      }
+    }
+  }
+
+  /** Persist semantics before anyone else reacts, including the final reply. */
+  private async recordLastInteraction(conversationId: string): Promise<void> {
+    if (this.participants.length < 2 || this.currentConversationId !== conversationId) return;
+    const message = this.messages[this.messages.length - 1];
+    const target = this.target;
+    const modelId = this.activeModelId;
+    if (!message || message.interaction || !target || !modelId ||
+      message.status !== "complete" || message.kind !== "speech") return;
+    const attempt = `${message.id}:${message.content}`;
+    if (this.interactionAttempts.has(attempt)) return;
+    this.interactionAttempts.add(attempt);
+    this.directing = true;
+    try {
+      const profile = await profileRepo.get(modelId);
+      const interaction = await analyzeInteraction({
+        connection: target, modelId, message,
+        history: this.messages.slice(0, -1), participants: this.roster,
+        userName: this.userName, pack: this.pack, extraParameters: profile.customParameters,
+        contextTokens: this.contextBudgetFor(modelId, profile.contextWindow).tokens,
+      });
+      if (!interaction || this.currentConversationId !== conversationId ||
+        !this.messages.some((m) => m.id === message.id && m.content === message.content && m.status === "complete")) return;
+      await messageRepo.saveInteraction(message, interaction);
+      this.messages = this.messages.map((m) => m.id === message.id
+        ? { ...m, interaction, addressee: interaction.addresseeId } : m);
+    } finally {
+      this.directing = false;
     }
   }
 
@@ -1388,7 +1499,7 @@ class AppState {
       recent,
       speaker.id,
       this.labelFor,
-      undefined,
+      this.addresseeLabelFor(speaker.id),
       this.pack,
     );
     const precedingTurn =
@@ -1407,6 +1518,7 @@ class AppState {
         precedingTurn,
         profile.customParameters,
         this.pack,
+        conv.sceneDescription,
       );
       state = assessment.state;
       immediateReaction = assessment.reaction;
@@ -1454,6 +1566,7 @@ class AppState {
       immediateReaction,
       temporal,
       summary: conv.summary,
+      coordination: scene ? this.coordination : undefined,
       recentMessages: recent,
       sceneDescription: conv.sceneDescription,
       contextTokens,
@@ -1484,6 +1597,8 @@ class AppState {
       body.stop = speakerStopSequences(otherNames, this.userName, this.pack);
     }
 
+    if (this.turnAborted || this.currentConversationId !== conv.id) return false;
+
     const assistantMessage = await messageRepo.create(
       conv.id,
       "assistant",
@@ -1491,14 +1606,19 @@ class AppState {
       "streaming",
       { id: speaker.id, name: speaker.name },
     );
+    if (this.turnAborted || this.currentConversationId !== conv.id) {
+      await messageRepo.remove(assistantMessage.id);
+      return false;
+    }
     this.messages = [...this.messages, assistantMessage];
+    this.pendingSpeakerIds = [];
     this.streaming = true;
     this.streamingContent = "";
     this.streamingPersonaId = speaker.id;
     const requestId = newId();
     this.streamRequestId = requestId;
 
-    return new Promise<boolean>((resolve) => {
+    const completed = await new Promise<boolean>((resolve) => {
       let settled = false;
       let rawContent = "";
       const publishStreamingContent = () => {
@@ -1556,7 +1676,7 @@ class AppState {
               ),
           );
 
-        resolve(status === "complete");
+        resolve(status === "complete" && content.trim().length > 0);
       };
 
       streamChat(target, requestId, body, {
@@ -1576,6 +1696,8 @@ class AppState {
         void finalize("error");
       });
     });
+    if (completed) await this.recordLastInteraction(conv.id);
+    return completed;
   }
 
   /**
@@ -1644,6 +1766,9 @@ class AppState {
     } finally {
       this.summarizing = false;
       this.summaryPendingMessages = 0;
+      // « Se taire » peut être activé pendant une reconstruction manuelle,
+      // qui ne passe pas par withTurn et ne libère donc pas la scène elle-même.
+      if (this.userSilent) this.scheduleIdleChatter();
     }
   }
 
@@ -1740,6 +1865,7 @@ class AppState {
 
   /** Annule la réponse en cours et abandonne les tours restants. */
   async cancelGeneration(): Promise<void> {
+    if (this.userSilent) this.reclaimFloor();
     this.cancelIdleChatter();
     this.turnAborted = true;
     this.pendingSpeakerIds = [];
@@ -1775,7 +1901,7 @@ class AppState {
             speaker.id,
           )
         : describeAutonomousTurn(this.userName, this.pack);
-      await this.playRound(conv.id, [speaker.id], () => addressing);
+      await this.playRound(conv.id, [speaker.id], () => addressing, true);
       this.pendingSpeakerIds = [];
       await this.runPostTurnTasks(conv.id);
     });
@@ -1783,24 +1909,34 @@ class AppState {
 
   /** Modifie le dernier message utilisateur et rejoue le tour complet. */
   async editLastUserMessage(newContent: string): Promise<void> {
-    if (this.streaming || this.turnInProgress) return;
+    if (!this.userHasFloor || !newContent.trim()) return;
     const conv = this.currentConversation;
     if (!conv) return;
     const lastUser = [...this.messages]
       .reverse()
       .find((m) => m.role === "user" && m.kind === "speech");
     if (!lastUser) return;
-    await messageRepo.removeAfter(conv.id, lastUser);
-    await messageRepo.update(lastUser.id, newContent, "complete");
-    this.messages = this.messages
-      .filter(
-        (m) =>
-          m.createdAt < lastUser.createdAt ||
-          (m.createdAt === lastUser.createdAt && m.id <= lastUser.id),
-      )
-      .map((m) => (m.id === lastUser.id ? { ...m, content: newContent } : m));
-    const plan = planSpeakers(newContent, this.roster, this.composerTargetId);
-    await this.runTurns(conv.id, plan.personaIds, this.addressingFor(plan));
+    const content = newContent.trim();
+    const plan = planSpeakers(content, this.roster, this.composerTargetId, this.pack);
+    const addressee = plan.reason !== "all" && plan.personaIds.length === 1 ? plan.personaIds[0] : null;
+    await this.withTurn(async () => {
+      await messageRepo.removeAfter(conv.id, lastUser);
+      await messageRepo.update(lastUser.id, content, "complete", addressee);
+      // A long autonomous exchange may already have summarized the edited
+      // message and the deleted replies. Rebuild from the surviving history.
+      if (conv.summary) {
+        const updated = { ...conv, summary: null, summaryThroughMessageId: null };
+        await conversationRepo.update(updated);
+        this.conversations = this.conversations.map((c) => c.id === conv.id ? updated : c);
+        this.summaryRetryFloor.delete(conv.id);
+      }
+      if (this.currentConversationId !== conv.id) return;
+      const index = this.messages.findIndex((m) => m.id === lastUser.id);
+      this.messages = this.messages.slice(0, index + 1)
+        .map((m) => m.id === lastUser.id ? { ...m, content, interaction: null, addressee } : m);
+      this.interactionAttempts.delete(`${lastUser.id}:${lastUser.content}`);
+      await this.playTurn(conv.id, plan.personaIds, this.addressingFor(plan), plan.reason !== "all");
+    });
   }
 
   // -------------------------------------------------------------------------

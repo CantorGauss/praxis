@@ -3,12 +3,14 @@
   import ChatComposer from "./ChatComposer.svelte";
   import ChatHeader from "./ChatHeader.svelte";
   import ChatTranscript from "./ChatTranscript.svelte";
+  import CoordinationPanel from "./CoordinationPanel.svelte";
 
   let composerHeight = $state(0);
 </script>
 
 <div class="chat">
   <ChatHeader />
+  <CoordinationPanel />
 
   {#if app.errorBanner}
     <div class="banner error">

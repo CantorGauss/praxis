@@ -9,6 +9,7 @@ import type {
   EmotionalState,
   Message,
   MessageKind,
+  MessageInteraction,
   MessageStatus,
   ModelProfile,
   Persona,
@@ -19,6 +20,7 @@ import { getApiKey, setApiKey } from "./llmClient";
 import { neutralState } from "./emotion";
 import { normalizeAppearance, type AvatarAppearance } from "./avatar";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./inference";
+import { decodeInteraction } from "./coordination";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -767,6 +769,7 @@ type MessageRow = {
   persona_name: string | null;
   kind: MessageKind | null;
   addressee: string | null;
+  interaction: string | null;
 };
 
 function messageFromRow(r: MessageRow): Message {
@@ -781,6 +784,7 @@ function messageFromRow(r: MessageRow): Message {
     personaId: r.persona_id,
     personaName: r.persona_name,
     addressee: r.addressee,
+    interaction: decodeInteraction(r.interaction),
   };
 }
 
@@ -853,7 +857,7 @@ export const messageRepo = {
   ): Promise<void> {
     const db = await getDb();
     if (addressee === undefined) {
-      await db.execute("UPDATE messages SET content = $2, status = $3 WHERE id = $1", [
+      await db.execute("UPDATE messages SET content = $2, status = $3, interaction = NULL WHERE id = $1", [
         id,
         content,
         status,
@@ -861,8 +865,17 @@ export const messageRepo = {
       return;
     }
     await db.execute(
-      "UPDATE messages SET content = $2, status = $3, addressee = $4 WHERE id = $1",
+      "UPDATE messages SET content = $2, status = $3, addressee = $4, interaction = NULL WHERE id = $1",
       [id, content, status, addressee],
+    );
+  },
+
+  async saveInteraction(message: Message, interaction: MessageInteraction): Promise<void> {
+    const db = await getDb();
+    // A delayed analysis must not attach itself to an edited/cancelled reply.
+    await db.execute(
+      "UPDATE messages SET interaction = $2, addressee = $3 WHERE id = $1 AND content = $4 AND status = 'complete'",
+      [message.id, JSON.stringify(interaction), interaction.addresseeId, message.content],
     );
   },
 
@@ -1152,7 +1165,7 @@ const EXPORT_TABLES = [
   "messages",
 ] as const;
 
-export const EXPORT_SCHEMA_VERSION = 6;
+export const EXPORT_SCHEMA_VERSION = 7;
 
 export async function exportAllData(): Promise<string> {
   const db = await getDb();

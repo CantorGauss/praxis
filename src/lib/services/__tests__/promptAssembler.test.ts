@@ -70,6 +70,17 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
 }
 
 describe("assemblePrompt", () => {
+  it("includes current agreements after the history and reserves their context budget", () => {
+    const coordination = "[COORDINATION] Marc accepte sous condition : moins de vingt euros.";
+    const input = baseInput({ coordination, summary: "Un ancien résumé." });
+    const result = assemblePrompt(input);
+    expect(result.error).toBeNull();
+    expect(result.system).not.toContain(coordination);
+    expect(result.messages.at(-1)!.content).toContain(coordination);
+    expect(result.estimatedTokens + input.reserveOutputTokens).toBeLessThanOrEqual(input.contextTokens);
+    expect(assemblePrompt(baseInput({ coordination: "x".repeat(40_000), contextTokens: 4096 })).error).not.toBeNull();
+  });
+
   it("assemble les sections dans l'ordre déterministe", () => {
     const input = baseInput({
       state: {
@@ -226,6 +237,27 @@ describe("assemblePrompt", () => {
     expect(result.system).toContain("[CONVENTIONS D'ÉCRITURE]");
     expect(result.system).toContain("entre astérisques");
     expect(result.system).not.toContain("[SCÈNE]");
+  });
+
+  it("rappelle la situation près de la dernière réplique pour lever les sous-entendus", () => {
+    const situation =
+      "Anna et Jeff reviennent à Paris après une semaine de vacances passée ensemble.";
+    const result = assemblePrompt(
+      baseInput({
+        sceneDescription: situation,
+        recentMessages: [message("1", "user", "Et voilà, c'est fini")],
+      }),
+    );
+
+    expect(result.system).toContain("[SITUATION DE DÉPART]");
+    expect(result.system).toContain(situation);
+    const tail = result.messages.at(-1)?.content ?? "";
+    expect(tail).toContain("Et voilà, c'est fini");
+    expect(tail).toContain("[ANCRAGE DE SCÈNE POUR CETTE RÉPLIQUE]");
+    expect(tail).toContain(situation);
+    expect(tail.indexOf("Et voilà, c'est fini")).toBeLessThan(
+      tail.indexOf("[ANCRAGE DE SCÈNE POUR CETTE RÉPLIQUE]"),
+    );
   });
 
   it("nomme explicitement l'humain même quand le personnage est seul", () => {

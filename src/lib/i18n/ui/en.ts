@@ -269,6 +269,12 @@ export const enUi = {
     newLinesBelow: "New lines below",
     queued: "Queued",
     yourTurn: "Your turn to speak",
+    staySilent: "Stay silent",
+    staySilentHint: "Let the characters talk among themselves until you join in",
+    reclaimFloor: "Take the floor",
+    reclaimFloorHint: "Let the current line finish, then wait for your message",
+    listening: "You are listening",
+    listeningHint: "The characters continue among themselves",
     composerOptions: "Input options",
     composerOptionsTitle: "Speech, action or scene event",
     speak: "Speak",
@@ -310,6 +316,20 @@ export const enUi = {
     theCharacter: "The character",
     floorHintAutonomous: "type: you take the floor back after this line",
     floorHintDeferred: "you can type: your message goes out at the end of the turn",
+  },
+
+  coordination: {
+    title: "Proposals and agreements",
+    hint: "A missing response is not agreement. Conditions remain open until resolved.",
+    intentHint: "Intention expressed in this message",
+    unknownPerson: "Former participant",
+    pending: "No position expressed",
+    status: { open: "Under discussion", agreed: "Agreed", withdrawn: "Withdrawn", superseded: "Replaced" },
+    stance: { agree: "Agrees", disagree: "Objects", conditional: "Under conditions" },
+    intent: {
+      statement: "Statement", question: "Question", answer: "Answer", clarification: "Clarification",
+      proposal: "Proposal", agreement: "Agreement", objection: "Objection", conditional: "Condition", withdrawal: "Withdrawal",
+    },
   },
 
   newChat: {
@@ -453,14 +473,14 @@ export const enUi = {
       `around ${ratioPercent}% of the window.`,
     groupConversation: "Multi-character conversation",
     whoSpeaks: "Who takes the floor",
-    roundRobin: "One after another",
+    roundRobin: "Scene order",
     modelDecides: "The model decides",
     whoSpeaksHint:
-      "“One after another” makes everyone answer, in scene order — safe, but " +
-      "mechanical. “The model decides” asks before each turn who would naturally " +
-      "react: an ignored character may stay silent, two may answer together, and " +
-      "the scene may settle on its own. It costs one short extra request per " +
-      "turn, and your “@Name” mentions always take priority.",
+      "“Scene order” follows the cast order while prioritizing direct questions. " +
+      "“The model decides” chooses the next speaker after every utterance; a character " +
+      "may answer again or stay silent. Your “@Name” mentions always take priority. " +
+      "Group conversations also track intentions and agreements. These short analyses " +
+      "use the selected connection and can add a pause between replies.",
     autoRounds: "Automatic exchanges between characters",
     autoRoundsNone: "None — they wait for your message",
     autoRoundsN: (n: number) => `${n} extra turn${n > 1 ? "s" : ""}`,

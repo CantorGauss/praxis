@@ -1,9 +1,35 @@
-import { describe, expect, it } from "vitest";
-import { parseSpeakerChoice } from "../director";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseSpeakers, parseSpeakerChoice } from "../director";
+import * as llm from "../llmClient";
 
 const ANNA = { id: "p-anna", name: "Anna" };
 const MARC = { id: "p-marc", name: "Marc" };
 const ROSTER = [ANNA, MARC];
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("chooseSpeakers", () => {
+  const input = {
+    connection: { id: "local", baseUrl: "http://localhost:8080/v1", allowRemoteHosts: false, timeoutMs: 1000 },
+    modelId: "model", participants: ROSTER, descriptions: {}, recentMessages: [],
+    label: () => "Jeff", userName: "Jeff", afterUserMessage: false, coordination: "Pending proposal: dinner",
+  };
+
+  it("selects a single next speaker and includes shared coordination", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue('["Marc","Anna"]');
+    expect(await chooseSpeakers(input)).toEqual([MARC.id]);
+    expect(JSON.stringify(chat.mock.calls[0])).toContain("Pending proposal: dinner");
+  });
+
+  it("distinguishes explicit silence from unusable model output", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue("[]");
+    expect(await chooseSpeakers(input)).toEqual([]);
+    chat.mockResolvedValue("Je ne sais pas.");
+    expect(await chooseSpeakers(input)).toBeNull();
+    chat.mockResolvedValue('["Unknown"]');
+    expect(await chooseSpeakers(input)).toBeNull();
+  });
+});
 
 describe("parseSpeakerChoice", () => {
   it("lit un tableau JSON de noms, dans l'ordre", () => {

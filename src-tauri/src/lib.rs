@@ -728,6 +728,12 @@ fn migrations() -> Vec<Migration> {
                 SET thinking_strategy = '{"kind":"unsupported"}';
         "#,
         },
+        Migration {
+            version: 10,
+            description: "message_interactions",
+            kind: MigrationKind::Up,
+            sql: "ALTER TABLE messages ADD COLUMN interaction TEXT;",
+        },
     ]
 }
 

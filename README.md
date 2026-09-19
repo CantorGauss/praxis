@@ -20,12 +20,37 @@ personality, mood and settings — and each one sees what the others just said.
 
 Say something vague and everyone chimes in. Write `@Marc` and only Marc answers.
 Or hand the floor to the model: it looks at what was just said and decides who
-would actually react — sometimes two of them, sometimes nobody, because
-sometimes nobody has anything to add.
+would actually react. It chooses one speaker at a time and reassesses after
+every reply: Anna can answer Marc immediately, without waiting for a whole
+round of the room. Sometimes nobody has anything to add. Direct questions get
+priority in the scene-order mode too; explicit mentions still select who answers.
+
+**They can agree on something and remember what they agreed to.** Group messages
+carry a short, inferred intention — question, proposal, objection, agreement —
+and a reference to the message being answered. The **Proposals and agreements**
+panel follows concrete suggestions and each participant's position, with links
+back to their words. A conditional yes stays conditional; silence never counts
+as consent. Revising a proposal requires fresh agreements. The current cast
+forms the decision group; you join it when you propose something or a proposal
+is addressed to you. The group stays fixed for that proposal even if someone
+later leaves the scene.
+
+These observations are stored with their source messages, included in backups,
+and supplied to later speakers alongside the recent dialogue. Editing or
+regenerating a message removes its previous contribution. Existing conversations
+remain readable; earlier messages are not automatically reanalyzed in bulk.
+Short analysis requests use your selected connection, independently of mood
+analysis, and may add a pause between replies. If the model cannot produce a
+usable analysis, ordinary dialogue continues without inventing an agreement.
 
 Then step back and let them run. Set the scene to keep going on its own for a
 turn or three after your message, or go quiet and watch them pick the
 conversation back up without you.
+
+Click **Stay silent** beside the composer to let the characters keep talking
+without waiting for your turn, even at the start of a scene. **Take the floor**
+or send a message to let the current line finish and join back in. This mode
+stays with the open conversation and overrides the usual automatic-turn limit.
 
 **They're in a mood, and it lasts.** Before a character answers, Praxis works
 out how they'd actually feel about what just happened — startled, delighted,

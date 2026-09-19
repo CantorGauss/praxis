@@ -17,6 +17,10 @@ export type PromptPack = {
   scene: ScenePrompts;
   assembler: AssemblerPrompts;
   director: DirectorPrompts;
+  coordination: {
+    analysisSystem: string;
+    context(data: string): string;
+  };
   summary: SummaryPrompts;
   emotion: EmotionPrompts;
   temporal: TemporalPrompts;
@@ -54,6 +58,7 @@ export type ScenePrompts = {
   addressingYouAnd(userName: string, others: string): string;
   /** Tour sans message de l'utilisateur : les personnages se répondent. */
   autonomousTurn(userName: string): string;
+  userSilentTurn(userName: string): string;
   /** Rappel factuel de l'état du tour, placé en toute fin de prompt. */
   lastTurnSpeaker(speakerName: string, addresseeName: string | null): string;
   lastTurnUserSilent(userName: string, turns: number): string;
@@ -83,6 +88,8 @@ export type AssemblerPrompts = {
   responseLength(instruction: string): string;
   emotionalPlay(): string;
   startingSituation(situation: string): string;
+  /** Rappel saillant placé juste avant la réponse, près de la dernière réplique. */
+  sceneReminder(situation: string): string;
   writingConventions(userName: string, userGender: Gender): string;
   conversationSummary(summary: string): string;
   immediateReaction(input: {
@@ -134,6 +141,7 @@ export type EmotionPrompts = {
   analysisSystem(input: { personaName: string; moodList: string }): string;
   analysisUser(input: {
     characterization: string;
+    sceneDescription: string | null;
     mood: string;
     valence: string;
     energy: string;

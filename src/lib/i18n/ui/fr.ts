@@ -269,6 +269,12 @@ export const frUi: UiStrings = {
     newLinesBelow: "Nouvelles répliques plus bas",
     queued: "En attente",
     yourTurn: "À vous de parler",
+    staySilent: "Se taire",
+    staySilentHint: "Laisser les personnages parler entre eux jusqu'à votre intervention",
+    reclaimFloor: "Reprendre la parole",
+    reclaimFloorHint: "Laisser finir la réplique en cours, puis attendre votre message",
+    listening: "Vous écoutez",
+    listeningHint: "Les personnages poursuivent entre eux",
     composerOptions: "Options de saisie",
     composerOptionsTitle: "Parole, action ou événement de scène",
     speak: "Parler",
@@ -310,6 +316,20 @@ export const frUi: UiStrings = {
     theCharacter: "Le personnage",
     floorHintAutonomous: "écrivez : vous reprenez la parole après cette réplique",
     floorHintDeferred: "vous pouvez écrire : votre message partira à la fin du tour",
+  },
+
+  coordination: {
+    title: "Propositions et accords",
+    hint: "Une absence de réponse ne vaut pas accord. Les conditions restent à résoudre.",
+    intentHint: "Intention exprimée dans ce message",
+    unknownPerson: "Ancien participant",
+    pending: "Sans position exprimée",
+    status: { open: "En discussion", agreed: "Accord obtenu", withdrawn: "Retirée", superseded: "Remplacée" },
+    stance: { agree: "D’accord", disagree: "S’oppose", conditional: "Sous conditions" },
+    intent: {
+      statement: "Déclaration", question: "Question", answer: "Réponse", clarification: "Précision",
+      proposal: "Proposition", agreement: "Accord", objection: "Objection", conditional: "Condition", withdrawal: "Retrait",
+    },
   },
 
   newChat: {
@@ -456,15 +476,14 @@ export const frUi: UiStrings = {
       `de la fenêtre.`,
     groupConversation: "Conversation à plusieurs personnages",
     whoSpeaks: "Qui prend la parole",
-    roundRobin: "Chacun son tour",
+    roundRobin: "Ordre de la scène",
     modelDecides: "Le modèle décide",
     whoSpeaksHint:
-      "« Chacun son tour » fait répondre tout le monde, dans l'ordre de la scène — " +
-      "sûr, mais mécanique. « Le modèle décide » demande avant chaque tour qui " +
-      "réagirait naturellement : un personnage ignoré peut se taire, deux peuvent " +
-      "répondre ensemble, et la scène peut retomber d'elle-même. Cela coûte une " +
-      "requête courte de plus par tour, et vos mentions « @Nom » restent toujours " +
-      "prioritaires.",
+      "« Ordre de la scène » suit la distribution en donnant priorité aux questions directes. " +
+      "« Le modèle décide » choisit le prochain locuteur après chaque réplique ; un personnage " +
+      "peut répondre à nouveau ou se taire. Vos mentions « @Nom » restent prioritaires. " +
+      "Les conversations de groupe suivent aussi les intentions et les accords. Ces analyses " +
+      "courtes utilisent la connexion choisie et peuvent ajouter une pause entre les répliques.",
     autoRounds: "Échanges automatiques entre personnages",
     autoRoundsNone: "Aucun — ils attendent votre message",
     autoRoundsN: (n: number) => `${n} tour${n > 1 ? "s" : ""} supplémentaire${n > 1 ? "s" : ""}`,

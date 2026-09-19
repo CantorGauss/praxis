@@ -28,6 +28,8 @@ export async function assessEmotionalReaction(
   /** Paramètres du profil de modèle (désactivation du raisonnement, etc.). */
   extraParameters: Record<string, unknown> = {},
   pack: PromptPack = DEFAULT_PROMPT_PACK,
+  /** Cadre factuel nécessaire pour interpréter un stimulus ambigu. */
+  sceneDescription: string | null = null,
 ): Promise<EmotionalAssessment> {
   try {
     const characterization = [
@@ -59,6 +61,7 @@ export async function assessEmotionalReaction(
             role: "user",
             content: pack.emotion.analysisUser({
               characterization,
+              sceneDescription: sceneDescription?.trim() || null,
               mood: decayedState.mood,
               valence: decayedState.valence.toFixed(2),
               energy: decayedState.energy.toFixed(2),

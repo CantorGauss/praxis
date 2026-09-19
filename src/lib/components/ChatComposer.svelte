@@ -59,6 +59,15 @@
     else await app.sendMessage(text);
   }
 
+  function toggleSilence() {
+    if (app.userSilent) {
+      app.reclaimFloor();
+      inputEl?.focus();
+    } else {
+      void app.staySilent();
+    }
+  }
+
   function reclaimQueued() {
     const pending = app.queuedMessage;
     if (!pending) return;
@@ -221,18 +230,35 @@
         <button onclick={reclaimQueued}>{s.common.edit}</button>
       </div>
     {/if}
-    <div
-      id="floor-state"
-      class="compact-status"
-      class:mine={app.userHasFloor}
-      aria-live="polite"
-    >
-      <span class="floor-dot"></span>
-      {#if app.userHasFloor}
-        <strong>{s.chat.yourTurn}</strong>
-      {:else}
-        <strong>{turnLabel}</strong>
-        <span>{floorHint}</span>
+    <div class="composer-status-row">
+      <div
+        id="floor-state"
+        class="compact-status"
+        class:mine={app.userHasFloor && !app.userSilent}
+        aria-live="polite"
+      >
+        <span class="floor-dot"></span>
+        {#if app.userSilent}
+          <strong>{s.chat.listening}</strong>
+          <span>{turnLabel ?? s.chat.listeningHint}</span>
+        {:else if app.userHasFloor}
+          <strong>{s.chat.yourTurn}</strong>
+        {:else}
+          <strong>{turnLabel}</strong>
+          <span>{floorHint}</span>
+        {/if}
+      </div>
+      {#if group}
+        <button
+          class="btn silence-button"
+          class:on={app.userSilent}
+          aria-pressed={app.userSilent}
+          title={app.userSilent ? s.chat.reclaimFloorHint : s.chat.staySilentHint}
+          disabled={!app.userSilent && Boolean(app.queuedMessage || app.pendingSceneActions.length)}
+          onclick={toggleSilence}
+        >
+          {app.userSilent ? s.chat.reclaimFloor : s.chat.staySilent}
+        </button>
       {/if}
     </div>
     <div class="composer-row">
@@ -400,6 +426,20 @@
     align-items: flex-end;
     gap: 9px;
     min-width: 0;
+  }
+
+  .composer-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 7px 12px;
+  }
+
+  .silence-button {
+    margin-left: auto;
+    min-height: 30px;
+    font-size: 11.5px;
   }
 
   .composer textarea {

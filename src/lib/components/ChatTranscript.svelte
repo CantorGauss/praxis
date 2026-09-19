@@ -158,6 +158,7 @@
       {:else}
       {@const speakerName = app.labelFor(m)}
       <div
+        id={`message-${m.id}`}
         class="message {m.role}"
         class:with-avatar={m.role === "assistant"}
         class:grouped={group}
@@ -197,6 +198,9 @@
                   >
                     {to ? to.name : s.chat.everyone}
                   </span>
+                  {#if m.status === "complete" && m.interaction && m.interaction.intent !== "statement"}
+                    <span class="intention" title={s.coordination.intentHint}>{s.coordination.intent[m.interaction.intent]}</span>
+                  {/if}
                 </div>
               {/if}
               <div
@@ -272,6 +276,8 @@
 
 
 <style>
+  .message { scroll-margin-top: 16px; }
+  .intention { color: var(--text-faint); font-size: 11px; margin-left: 6px; }
   .jump-bottom {
     position: absolute;
     left: 50%;

@@ -55,6 +55,7 @@ export type AssembleInput = {
   immediateReaction?: EmotionalReaction | null;
   temporal: TemporalContext;
   summary: string | null;
+  coordination?: string;
   recentMessages: Message[]; // du plus ancien au plus récent
   /** Situation de départ de la conversation, connue de tous les personnages. */
   sceneDescription?: string | null;
@@ -196,6 +197,17 @@ function buildVolatileBlock(input: AssembleInput): string {
 
   if (scene?.addressing) {
     volatileParts.push(a.thisTurn(scene.addressing));
+  }
+
+  if (input.coordination) volatileParts.push(input.coordination);
+
+  // Les petits modèles suivent parfois mieux les faits proches de la
+  // génération que les mêmes faits placés tôt dans le système. La situation
+  // reste dans le préfixe stable, mais ce rappel l'ancre aussi au moment exact
+  // où la dernière réplique doit être interprétée.
+  const situation = input.sceneDescription?.trim();
+  if (situation) {
+    volatileParts.push(a.sceneReminder(situation));
   }
 
   return volatileParts.join("\n\n");

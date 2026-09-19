@@ -444,7 +444,8 @@ export function planContinuation(
 
 /**
  * Nombre maximal de prises de parole par personnage entre deux messages de
- * l'utilisateur. Plafond dur : il s'applique aussi aux échanges automatiques.
+ * l'utilisateur. S'applique aux échanges automatiques, sauf lorsque
+ * l'utilisateur a explicitement choisi le mode « Se taire ».
  */
 export const MAX_CONSECUTIVE_AI_TURNS = 4;
 

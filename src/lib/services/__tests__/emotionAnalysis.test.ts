@@ -23,6 +23,7 @@ vi.mock("../repositories", () => ({
 import { chatCompletion } from "../llmClient";
 import { emotionRepo } from "../repositories";
 import { assessEmotionalReaction } from "../emotionAnalysis";
+import { frPrompts } from "../../i18n/prompts";
 
 const persona: Persona = {
   id: "p1",
@@ -102,5 +103,40 @@ describe("assessEmotionalReaction", () => {
     );
     expect(result).toEqual({ state, reaction: null });
     expect(emotionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it("interprète le stimulus dans la situation établie", async () => {
+    vi.mocked(chatCompletion).mockResolvedValue(
+      JSON.stringify({
+        mood: "sad",
+        intensity: 0.35,
+        impulse: "regarde une dernière fois les valises",
+        valenceDelta: -0.2,
+        energyDelta: -0.1,
+        warmthDelta: 0,
+        closenessDelta: 0.01,
+      }),
+    );
+
+    const situation =
+      "Anna et Jeff reviennent à Paris après une semaine de vacances passée ensemble.";
+    await assessEmotionalReaction(
+      TEST_CONNECTION,
+      "local-model",
+      persona,
+      state,
+      "Et voilà, c'est fini.",
+      {},
+      frPrompts,
+      situation,
+    );
+
+    const request = vi.mocked(chatCompletion).mock.calls[0][1];
+    const messages = request.messages as { content: string }[];
+    expect(messages[1].content).toContain("Situation établie de la conversation");
+    expect(messages[1].content).toContain(situation);
+    expect(messages[1].content.indexOf(situation)).toBeLessThan(
+      messages[1].content.indexOf("Et voilà, c'est fini."),
+    );
   });
 });
