@@ -1208,49 +1208,48 @@ export async function exportAllData(): Promise<string> {
   );
 }
 
+// Sauvegarde antérieure au multi-personnages : reconstituer les scènes et le
+// locuteur des messages à partir de la persona de chaque conversation.
+const IMPORT_FOLLOW_UP = [
+  `INSERT OR IGNORE INTO conversation_personas
+      (conversation_id, persona_id, position, active)
+   SELECT id, persona_id, 0, 1 FROM conversations`,
+  `UPDATE messages SET persona_id = (
+      SELECT c.persona_id FROM conversations c WHERE c.id = messages.conversation_id
+   ) WHERE role = 'assistant' AND persona_id IS NULL`,
+  `UPDATE messages SET persona_name = (
+      SELECT p.name FROM personas p WHERE p.id = messages.persona_id
+   ) WHERE persona_id IS NOT NULL AND persona_name IS NULL`,
+];
+
 export async function importAllData(json: string): Promise<void> {
   const parsed = JSON.parse(json) as {
     app?: string;
-    schemaVersion?: number;
-    tables?: Record<string, Record<string, unknown>[]>;
+    schemaVersion?: unknown;
+    tables?: unknown;
   };
-  if (parsed.app !== "anna" || !parsed.tables) {
+  if (parsed.app !== "anna" || !isRecord(parsed.tables)) {
     throw new Error("Ce fichier n'est pas une sauvegarde Anna valide.");
   }
-  const db = await getDb();
-  // Remplacement complet : vider dans l'ordre inverse des dépendances.
-  for (const table of [...EXPORT_TABLES].reverse()) {
-    await db.execute(`DELETE FROM ${table}`);
+  if (typeof parsed.schemaVersion === "number" && parsed.schemaVersion > EXPORT_SCHEMA_VERSION) {
+    throw new Error("Cette sauvegarde vient d'une version plus récente de Praxis.");
   }
-  for (const table of EXPORT_TABLES) {
-    const rows = parsed.tables[table] ?? [];
-    for (const row of rows) {
-      const cols = Object.keys(row);
-      if (!cols.length) continue;
-      const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-      await db.execute(
-        `INSERT INTO ${table} (${cols.join(",")}) VALUES (${placeholders})`,
-        cols.map((c) => row[c] as never),
-      );
+  const source = parsed.tables;
+  const tables = EXPORT_TABLES.map((name) => {
+    const rows = source[name] ?? [];
+    if (!Array.isArray(rows) || !rows.every(isRecord)) {
+      throw new Error(`Table illisible dans la sauvegarde : ${name}.`);
     }
-  }
-  // Sauvegarde antérieure au multi-personnages : reconstituer les scènes et
-  // le locuteur des messages à partir de la persona de chaque conversation.
-  await db.execute(
-    `INSERT OR IGNORE INTO conversation_personas
-        (conversation_id, persona_id, position, active)
-     SELECT id, persona_id, 0, 1 FROM conversations`,
-  );
-  await db.execute(
-    `UPDATE messages SET persona_id = (
-        SELECT c.persona_id FROM conversations c WHERE c.id = messages.conversation_id
-     ) WHERE role = 'assistant' AND persona_id IS NULL`,
-  );
-  await db.execute(
-    `UPDATE messages SET persona_name = (
-        SELECT p.name FROM personas p WHERE p.id = messages.persona_id
-     ) WHERE persona_id IS NOT NULL AND persona_name IS NULL`,
-  );
+    return { name, rows };
+  });
+  // Remplacement complet, en une transaction côté Rust : un échec laisse la
+  // base intacte. La base doit être ouverte pour que Rust la retrouve.
+  await getDb();
+  await invoke("import_backup", { tables, followUp: IMPORT_FOLLOW_UP });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function deleteAllData(): Promise<void> {
