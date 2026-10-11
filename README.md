@@ -9,7 +9,7 @@ Praxis plugs into any OpenAI-compatible endpoint — a model on your own machine
 or a hosted gateway like OpenRouter. Everything it stores lives in one SQLite
 file on your disk. No account, no telemetry, no cloud anything.
 
-![Three characters mid-scene, each answering in their own right](docs/screenshots/chat.png)
+![Three characters mid-scene, each answering in their own right](docs/screenshots/chat-stage.png)
 
 ## What actually happens
 
@@ -83,7 +83,7 @@ pronouns others use for them, and a prompt in your own words. Pick a portrait
 from the built-in set, set how long their answers run, how loose their tone is.
 Four ready-made characters are there if you'd rather edit than start blank.
 
-![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters.png)
+![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
 **Long conversations don't get slow.** Past a certain point, older messages get
 condensed into a working memory instead of being dropped or dragged along
