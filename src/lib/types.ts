@@ -168,7 +168,11 @@ export type SceneProposal = {
 export type Message = {
   id: string;
   conversationId: string;
-  /** Rôle protocolaire envoyé au serveur ; une didascalie voyage en `user`. */
+  /**
+   * Rôle protocolaire envoyé au serveur. Pour une didascalie, il désigne son
+   * auteur — `user` pour l'utilisateur, `assistant` pour un imprévu écrit par
+   * le modèle — et elle voyage de toute façon dans un bloc `user`.
+   */
   role: "user" | "assistant";
   kind: MessageKind;
   content: string;
@@ -185,7 +189,14 @@ export type Message = {
   addressee: string | null;
   /** Absent in older conversations; attached to the source message for replay. */
   interaction?: MessageInteraction | null;
+  /**
+   * Humeur du locuteur au moment de la réplique, figée pour l'affichage.
+   * Absente pour l'utilisateur et dans les conversations antérieures.
+   */
+  reaction?: MessageReaction | null;
 };
+
+export type MessageReaction = Pick<EmotionalReaction, "mood" | "intensity">;
 
 /** Valeur d'`addressee` désignant l'utilisateur, qui n'est pas une persona. */
 export const USER_ADDRESSEE = "user";
@@ -341,6 +352,11 @@ export type AppSettings = {
    */
   idleChatterSeconds: number;
   /**
+   * Imprévus : quand les personnages tournent en rond sans l'utilisateur, le
+   * modèle écrit une didascalie qui relance la scène.
+   */
+  sceneTwists: boolean;
+  /**
    * Nombre de messages non résumés au-delà duquel un résumé est déclenché.
    * Borne le coût de chaque requête indépendamment de la longueur des
    * répliques : au-delà, les plus anciennes passent dans le résumé.
@@ -366,6 +382,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sceneDirector: "model",
   sceneAutoRounds: 1,
   idleChatterSeconds: 30,
+  sceneTwists: true,
   historyWindowMessages: 30,
 };
 

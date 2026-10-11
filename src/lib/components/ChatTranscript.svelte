@@ -2,11 +2,13 @@
   import { tick } from "svelte";
   import { app } from "../state/appState.svelte";
   import Avatar from "./Avatar.svelte";
-  import { personaAccent } from "../services/avatar";
-  import { t } from "../i18n/ui.svelte";
+  import { MOOD_COLORS, personaAccent } from "../services/avatar";
+  import { bubbleTone, tint, type BubbleTone } from "../services/bubbleTone";
+  import { MOOD_LABELS_BY_LOCALE } from "../i18n/moods";
+  import { t, uiLocale } from "../i18n/ui.svelte";
   import { splitActions } from "../services/messageFormat";
   import { detectAddressee } from "../services/scene";
-  import { USER_ADDRESSEE, type Message } from "../types";
+  import { USER_ADDRESSEE, type DialogueIntent, type Message } from "../types";
 
   let { bottomOffset = 0 }: { bottomOffset?: number } = $props();
 
@@ -81,12 +83,53 @@
     });
   });
 
+  // Seules les répliques nées sous les yeux de l'utilisateur font leur
+  // entrée : rouvrir une conversation ne rejoue pas toute la pièce.
+  let openedAt = $state(Date.now());
+
   $effect(() => {
     void app.currentConversationId;
     followStream = true;
     unreadBelow = false;
     lastObservedMessageId = null;
+    openedAt = Date.now();
   });
+
+  function isFresh(message: Message): boolean {
+    return Date.parse(message.createdAt) >= openedAt - 500;
+  }
+
+  const moodLabels = $derived(MOOD_LABELS_BY_LOCALE[uiLocale()]);
+
+  function toneOf(message: Message): BubbleTone {
+    const reaction = app.settings.emotionEnabled ? message.reaction : null;
+    return bubbleTone(message.content, reaction);
+  }
+
+  /** Teinte de la bulle, dosée par l'intensité de l'humeur. */
+  function toneStyle(tone: BubbleTone): string {
+    if (!tone.mood) return "";
+    const color = MOOD_COLORS[tone.mood];
+    const k = 0.35 + tone.intensity * 0.65;
+    return [
+      `--tone-wash: ${tint(color, 0.05 + 0.13 * k)}`,
+      `--tone-edge: ${tint(color, 0.18 + 0.45 * k)}`,
+      `--tone-glow: ${tint(color, 0.1 + 0.32 * k)}`,
+      `--tone-solid: ${color}`,
+    ].join("; ");
+  }
+
+  const INTENT_ICON: Record<DialogueIntent, string> = {
+    statement: "",
+    question: "?",
+    answer: "↩",
+    clarification: "ℹ",
+    proposal: "💡",
+    agreement: "✓",
+    objection: "✋",
+    conditional: "≈",
+    withdrawal: "↶",
+  };
 
   async function copyMessage(message: Message) {
     await navigator.clipboard.writeText(message.content);
@@ -154,14 +197,21 @@
     {/if}
     {#each app.messages as m (m.id)}
       {#if m.kind === "narration"}
-        <div class="narration">{m.content}</div>
+        <div
+          class="narration"
+          class:generated={m.role === "assistant"}
+          class:fresh={isFresh(m)}
+          title={m.role === "assistant" ? s.app.generatedTwist : undefined}
+        >{m.content}</div>
       {:else}
       {@const speakerName = app.labelFor(m)}
+      {@const tone = toneOf(m)}
       <div
         id={`message-${m.id}`}
-        class="message {m.role}"
+        class="message {m.role} enter-{tone.entrance}"
         class:with-avatar={m.role === "assistant"}
         class:grouped={group}
+        class:fresh={isFresh(m)}
       >
         {#if editing && editing.id === m.id}
           <div class="bubble editing">
@@ -176,7 +226,9 @@
         {:else}
           <div class="row">
             {#if m.role === "assistant"}
-              <Avatar size={64} personaId={m.personaId} fallbackName={speakerName} />
+              <div class="avatar-slot">
+                <Avatar size={64} personaId={m.personaId} fallbackName={speakerName} />
+              </div>
             {/if}
             <div class="column">
               {#if group}
@@ -199,20 +251,36 @@
                     {to ? to.name : s.chat.everyone}
                   </span>
                   {#if m.status === "complete" && m.interaction && m.interaction.intent !== "statement"}
-                    <span class="intention" title={s.coordination.intentHint}>{s.coordination.intent[m.interaction.intent]}</span>
+                    <span
+                      class="intention intent-{m.interaction.intent}"
+                      title={s.coordination.intentHint}
+                    ><span class="intent-icon" aria-hidden="true">{INTENT_ICON[m.interaction.intent]}</span>{s.coordination.intent[m.interaction.intent]}</span>
                   {/if}
                 </div>
               {/if}
               <div
-                class="bubble"
+                class="bubble {tone.delivery ? `say-${tone.delivery}` : ''}"
                 class:cancelled={m.status === "cancelled"}
+                class:streaming={m.status === "streaming"}
+                class:moody={tone.mood !== null}
+                style={toneStyle(tone)}
                 style:--speaker-c={m.role === "assistant"
                   ? personaAccent(m.personaId ?? speakerName)
                   : "transparent"}
                 class:tinted={group && m.role === "assistant"}
               >
-                {#each splitActions(m.content) as seg}{#if seg.kind === "action"}<span
-                      class="rp-action">{seg.text}</span>{:else}{seg.text}{/if}{/each}{#if m.status === "streaming"}<span class="cursor">▍</span>{/if}
+                {#if tone.emoji && m.status !== "cancelled"}
+                  <span
+                    class="mood-badge"
+                    title={tone.mood ? moodLabels[tone.mood] : undefined}
+                    aria-label={tone.mood ? moodLabels[tone.mood] : undefined}
+                  >{tone.emoji}</span>
+                {/if}
+                {#if m.status === "streaming" && !m.content}<span
+                    class="typing"
+                    aria-label={s.chat.isAnswering(speakerName)}
+                  ><i></i><i></i><i></i></span>{/if}{#each splitActions(m.content) as seg}{#if seg.kind === "action"}<span
+                      class="rp-action">{seg.text}</span>{:else}{seg.text}{/if}{/each}{#if m.status === "streaming" && m.content}<span class="cursor">▍</span>{/if}
                 {#if m.status === "cancelled"}
                   <div class="status-label">{s.chat.interrupted}</div>
                 {/if}
@@ -247,12 +315,17 @@
     {/if}
 
     {#if app.directing}
-      <div class="turn-status">{s.chat.whoSpeaks}</div>
+      <div class="turn-status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{s.chat.whoSpeaks}</div>
     {/if}
 
     {#if group && (streamingPersona || pendingNames.length > 0)}
       <div class="turn-status">
         {#if streamingPersona}
+          <span
+            class="dots"
+            aria-hidden="true"
+            style:--dot-c={personaAccent(streamingPersona.id)}
+          ><i></i><i></i><i></i></span>
           {s.chat.isAnswering(streamingPersona.name)}
         {/if}
         {#if pendingNames.length > 0}
@@ -277,7 +350,24 @@
 
 <style>
   .message { scroll-margin-top: 16px; }
-  .intention { color: var(--text-faint); font-size: 11px; margin-left: 6px; }
+  .intention {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    padding: 1px 8px 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--intent-c, var(--border));
+    color: var(--intent-c, var(--text-faint));
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .intent-icon { font-size: 10.5px; }
+  .intent-question { --intent-c: rgba(143, 124, 232, 0.8); }
+  .intent-proposal { --intent-c: rgba(240, 179, 68, 0.85); }
+  .intent-agreement { --intent-c: rgba(95, 176, 125, 0.85); }
+  .intent-objection { --intent-c: rgba(225, 95, 85, 0.85); }
+  .intent-conditional { --intent-c: rgba(232, 152, 95, 0.85); }
   .jump-bottom {
     position: absolute;
     left: 50%;
@@ -348,6 +438,10 @@
     gap: 15px;
   }
 
+  .avatar-slot {
+    flex-shrink: 0;
+  }
+
   .column {
     display: flex;
     flex-direction: column;
@@ -402,6 +496,10 @@
     white-space: pre-wrap;
     word-break: break-word;
     border: 1px solid var(--bubble-border);
+    position: relative;
+    transition:
+      border-color 0.4s ease,
+      box-shadow 0.4s ease;
   }
 
   .message.user .bubble {
@@ -414,10 +512,108 @@
 
   .message.assistant .bubble {
     background:
-      linear-gradient(145deg, rgba(92, 58, 75, 0.1), transparent 64%),
+      linear-gradient(145deg, var(--tone-wash, rgba(92, 58, 75, 0.1)), transparent 64%),
       var(--bg-assistant-bubble);
     border-bottom-left-radius: 4px;
     box-shadow: 0 12px 28px -19px var(--bubble-shadow);
+  }
+
+  /* Humeur figée avec la réplique : un lavis et un liseré, dosés par l'intensité. */
+  .bubble.moody {
+    border-color: var(--tone-edge);
+    box-shadow:
+      0 12px 28px -19px var(--bubble-shadow),
+      0 0 22px -10px var(--tone-glow);
+  }
+
+  /* Pastille d'émotion, posée au coin de la bulle. */
+  .mood-badge {
+    position: absolute;
+    top: -11px;
+    right: -11px;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-size: 14px;
+    font-style: normal;
+    line-height: 1;
+    background: var(--bg-panel);
+    border: 1px solid var(--tone-edge, var(--border));
+    box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.45);
+    cursor: default;
+    user-select: none;
+  }
+
+  .message.user .mood-badge {
+    right: auto;
+    left: -11px;
+  }
+
+  /* Façon de dire : crier, chuchoter, rire. */
+  .bubble.say-shout {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    font-size: calc(var(--chat-font-size) * 1.05);
+    border-width: 1.5px;
+    border-color: var(--tone-edge, rgba(225, 79, 79, 0.45));
+  }
+
+  .bubble.say-whisper {
+    font-size: calc(var(--chat-font-size) * 0.94);
+    font-style: italic;
+    color: var(--text-soft);
+    border-style: dashed;
+  }
+
+  .bubble.say-laugh {
+    border-radius: 22px;
+  }
+
+  .message.user .bubble.say-laugh {
+    border-bottom-right-radius: 4px;
+  }
+
+  .message.assistant .bubble.say-laugh {
+    border-bottom-left-radius: 4px;
+  }
+
+  /* Points de suspension pendant que le personnage cherche ses mots. */
+  .typing,
+  .dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    vertical-align: middle;
+  }
+
+  .typing {
+    padding: 4px 2px;
+  }
+
+  .typing i,
+  .dots i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--speaker-c, var(--text-faint));
+    opacity: 0.5;
+  }
+
+  .message.user .typing i {
+    background: var(--text-faint);
+  }
+
+  .dots {
+    gap: 3px;
+    margin-right: 7px;
+  }
+
+  .dots i {
+    width: 5px;
+    height: 5px;
+    background: var(--dot-c, var(--text-faint));
   }
 
   /* En scène de groupe, un liseré coloré identifie le locuteur d'un coup d'œil. */
@@ -543,6 +739,18 @@
     border-bottom: 1px solid rgba(185, 141, 61, 0.12);
   }
 
+  /* Imprévu écrit par le modèle : même didascalie, signée d'un astérisme. */
+  .narration.generated::before {
+    content: "✦ ";
+    display: inline-block;
+    font-style: normal;
+    color: rgba(185, 141, 61, 0.7);
+  }
+
+  .narration.generated {
+    border-color: rgba(185, 141, 61, 0.24);
+  }
+
   .idle-hint {
     align-self: center;
     display: flex;
@@ -570,6 +778,272 @@
 
   .turn-status .waiting {
     opacity: 0.8;
+  }
+
+  /* ---------------------------------------------------------------------
+     Entrées en scène. Seules les répliques nouvelles bougent, et rien ne
+     bouge si le système demande de réduire les animations.
+     --------------------------------------------------------------------- */
+  @media (prefers-reduced-motion: no-preference) {
+    .message.fresh .column {
+      animation: enter-rise 0.32s ease-out both;
+    }
+
+    .message.assistant .column { transform-origin: 0% 100%; }
+    .message.user .column { transform-origin: 100% 100%; }
+
+    .message.fresh.enter-pop .column {
+      animation: enter-pop 0.42s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+    }
+    .message.fresh.enter-shake .column {
+      animation: enter-shake 0.55s ease-out both;
+    }
+    .message.fresh.enter-bounce .column {
+      animation: enter-bounce 0.6s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+    }
+    .message.fresh.enter-droop .column {
+      animation: enter-droop 0.9s ease-out both;
+    }
+    .message.fresh.enter-tremble .column {
+      animation: enter-tremble 0.8s linear both;
+    }
+    .message.fresh.enter-drift .column {
+      animation: enter-drift 0.9s ease-out both;
+    }
+    .message.fresh.enter-tilt .column {
+      animation: enter-tilt 0.5s ease-out both;
+    }
+
+    /* L'avatar réagit avec la bulle. */
+    .message.fresh .avatar-slot {
+      animation: avatar-in 0.4s ease-out both;
+    }
+    .message.fresh.enter-bounce .avatar-slot,
+    .message.fresh.enter-pop .avatar-slot {
+      animation: avatar-hop 0.55s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+    }
+    .message.fresh.enter-shake .avatar-slot,
+    .message.fresh.enter-tremble .avatar-slot {
+      animation: avatar-shake 0.55s ease-out both;
+    }
+    .message.fresh.enter-droop .avatar-slot {
+      animation: avatar-droop 1s ease-out both;
+    }
+
+    .message.fresh .mood-badge {
+      animation: badge-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) 0.25s both;
+    }
+    .message.fresh.enter-bounce .mood-badge {
+      animation:
+        badge-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) 0.25s both,
+        badge-wiggle 0.6s ease-in-out 0.7s 2;
+    }
+
+    /* Un cri envoie une onde autour de la bulle. */
+    .message.fresh .bubble.say-shout::after {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      border: 2px solid var(--tone-solid, rgba(225, 79, 79, 0.8));
+      pointer-events: none;
+      animation: shout-ring 0.7s ease-out 0.1s both;
+    }
+
+    /* La façon de dire se joue sur la bulle, au moment où elle se révèle —
+       parfois en plein streaming, quand la didascalie arrive. */
+    .message.fresh .bubble.say-shout {
+      animation: say-shake 0.5s ease-out 0.1s;
+    }
+    .message.fresh .bubble.say-laugh {
+      animation: say-giggle 0.7s ease-in-out 0.1s;
+    }
+    .message.fresh .bubble.say-tremble {
+      animation: enter-tremble 0.8s linear 0.1s;
+    }
+
+    /* Une lueur respire autour de la bulle tant que le personnage parle. */
+    .bubble.streaming::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      box-shadow: 0 0 18px -6px var(--tone-glow, var(--speaker-c, var(--accent)));
+      pointer-events: none;
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+
+    .typing i,
+    .dots i {
+      animation: typing 1.1s ease-in-out infinite;
+    }
+    .typing i:nth-child(2),
+    .dots i:nth-child(2) { animation-delay: 0.15s; }
+    .typing i:nth-child(3),
+    .dots i:nth-child(3) { animation-delay: 0.3s; }
+
+    .narration.fresh {
+      animation: narration-in 0.7s ease-out both;
+    }
+
+    /* Un imprévu traverse la scène d'un éclat doré. */
+    .narration.generated.fresh {
+      background-image: linear-gradient(
+        100deg,
+        transparent 35%,
+        rgba(210, 164, 77, 0.2) 50%,
+        transparent 65%
+      );
+      background-size: 300% 100%;
+      background-repeat: no-repeat;
+      animation:
+        narration-in 0.7s ease-out both,
+        sweep 1.6s ease-in-out 0.2s both;
+    }
+
+    .narration.generated.fresh::before {
+      animation: spark 1s ease-out 0.15s both;
+    }
+  }
+
+  @keyframes enter-rise {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes enter-pop {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.05); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes enter-shake {
+    0% { opacity: 0; transform: scale(0.9); }
+    18% { opacity: 1; transform: scale(1.04); }
+    30% { transform: translateX(-7px) rotate(-0.6deg); }
+    45% { transform: translateX(6px) rotate(0.5deg); }
+    60% { transform: translateX(-4px); }
+    75% { transform: translateX(3px); }
+    90% { transform: translateX(-1px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes enter-bounce {
+    0% { opacity: 0; transform: translateY(20px) scale(0.94); }
+    50% { opacity: 1; transform: translateY(-7px) scale(1.02); }
+    72% { transform: translateY(2px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes enter-droop {
+    from { opacity: 0; transform: translateY(-8px); filter: saturate(0.4); }
+    to { opacity: 1; transform: none; filter: none; }
+  }
+
+  @keyframes enter-tremble {
+    0% { opacity: 0; transform: translateX(0); }
+    15% { opacity: 1; transform: translateX(-2px); }
+    25% { transform: translateX(2px); }
+    35% { transform: translateX(-2px); }
+    45% { transform: translateX(1.5px); }
+    55% { transform: translateX(-1.5px); }
+    65% { transform: translateX(1px); }
+    75% { transform: translateX(-1px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes enter-drift {
+    from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
+    to { opacity: 1; filter: none; transform: none; }
+  }
+
+  @keyframes enter-tilt {
+    0% { opacity: 0; transform: translateY(8px) rotate(-2.5deg); }
+    60% { opacity: 1; transform: rotate(1deg); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes avatar-in {
+    from { opacity: 0; transform: scale(0.85); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes avatar-hop {
+    0% { opacity: 0; transform: translateY(8px) scale(0.9); }
+    45% { opacity: 1; transform: translateY(-9px) scale(1.04); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes avatar-shake {
+    0% { opacity: 0; }
+    20% { opacity: 1; transform: rotate(-6deg); }
+    40% { transform: rotate(5deg); }
+    60% { transform: rotate(-3deg); }
+    80% { transform: rotate(2deg); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes avatar-droop {
+    from { opacity: 0; transform: translateY(-6px) rotate(3deg); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes badge-pop {
+    from { opacity: 0; transform: scale(0) rotate(-30deg); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes badge-wiggle {
+    25% { transform: rotate(-14deg); }
+    75% { transform: rotate(14deg); }
+  }
+
+  @keyframes shout-ring {
+    from { opacity: 0.8; transform: scale(1); }
+    to { opacity: 0; transform: scale(1.08, 1.25); }
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.85; }
+  }
+
+  @keyframes say-shake {
+    0%, 100% { transform: none; }
+    15% { transform: translateX(-6px) rotate(-0.8deg); }
+    30% { transform: translateX(5px) rotate(0.6deg); }
+    45% { transform: translateX(-4px); }
+    60% { transform: translateX(3px); }
+    80% { transform: translateX(-1px); }
+  }
+
+  @keyframes say-giggle {
+    0%, 100% { transform: none; }
+    20% { transform: translateY(-4px) rotate(-0.6deg); }
+    40% { transform: translateY(0) rotate(0.4deg); }
+    60% { transform: translateY(-3px) rotate(-0.3deg); }
+    80% { transform: translateY(0); }
+  }
+
+  @keyframes typing {
+    0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+    30% { opacity: 0.95; transform: translateY(-4px); }
+  }
+
+  @keyframes narration-in {
+    from { opacity: 0; letter-spacing: 0.06em; }
+    to { opacity: 1; letter-spacing: normal; }
+  }
+
+  @keyframes sweep {
+    from { background-position: 100% 0; }
+    to { background-position: 0% 0; }
+  }
+
+  @keyframes spark {
+    0% { opacity: 0; transform: scale(0.2) rotate(-180deg); }
+    60% { opacity: 1; transform: scale(1.5) rotate(20deg); }
+    100% { opacity: 1; transform: none; }
   }
 
   @media (max-width: 920px) {

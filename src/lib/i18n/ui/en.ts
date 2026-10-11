@@ -493,6 +493,12 @@ export const enUi = {
       "If you say nothing for this long, the characters take the floor among " +
       "themselves. 0 for them to always wait for your message. Typing in the " +
       "input pushes the deadline back.",
+    sceneTwists: "Twists when the scene goes in circles",
+    sceneTwistsHint: (lines: number) =>
+      "When the characters repeat themselves without you, the model writes a " +
+      "stage direction that shakes things up: news arriving, an incident, an " +
+      "unexpected gesture. It costs one short extra request, at most once " +
+      `every ${lines} lines.`,
     characterBehaviour: "Character behaviour",
     defaultPersona: "Character offered when starting a conversation",
     noneOption: "— None —",
@@ -575,6 +581,7 @@ export const enUi = {
   /** Bandeaux et messages émis par l'état applicatif. */
   app: {
     narrationSpeaker: "Scene",
+    generatedTwist: "Twist written by the model to get the scene moving",
     personaWillEnter: (name: string) =>
       `${name} will enter at the end of the current turn.`,
     personaWillLeave: (name: string) =>

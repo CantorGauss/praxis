@@ -46,6 +46,32 @@ describe("buildRequestBody", () => {
     });
     expect(body.reasoning).toEqual({ effort: "none", exclude: true });
   });
+
+  it("ajoute des pénalités de répétition qu'un profil peut annuler", () => {
+    const options = {
+      connection: {
+        id: "local",
+        baseUrl: "http://localhost:1234/v1",
+        allowRemoteHosts: false,
+        timeoutMs: 120_000,
+      },
+      modelId: "local-model",
+      messages: [{ role: "user" as const, content: "Bonjour" }],
+      persona: { temperature: 0.7, topP: null, maxOutputTokens: null },
+      profile: { modelId: "local-model" },
+      stream: true,
+    };
+    const body = buildRequestBody(options);
+    expect(body.frequency_penalty).toBeGreaterThan(0);
+    expect(body.presence_penalty).toBeGreaterThan(0);
+
+    const custom = buildRequestBody({
+      ...options,
+      profile: { modelId: "local-model", customParameters: { frequency_penalty: 0, presence_penalty: 0 } },
+    });
+    expect(custom.frequency_penalty).toBe(0);
+    expect(custom.presence_penalty).toBe(0);
+  });
 });
 
 describe("extractCompletionText", () => {

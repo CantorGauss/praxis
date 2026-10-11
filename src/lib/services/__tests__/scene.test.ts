@@ -481,14 +481,17 @@ describe("detectAddressee", () => {
 });
 
 describe("describeAutonomousTurn", () => {
-  it("dit que l'utilisateur n'a rien ajouté et demande de conclure", () => {
+  it("dit que l'utilisateur n'a rien ajouté et pousse à faire avancer l'échange", () => {
     const texte = describeAutonomousTurn("Jeff", FR);
     expect(texte).toContain("Jeff n'a rien ajouté");
-    expect(texte).toContain("conclus");
+    expect(texte).toContain("fais avancer");
+    // Demander de conclure laissait chaque scène s'éteindre poliment.
+    expect(texte).not.toContain("conclus");
 
     const text = describeAutonomousTurn("Jeff", enPrompts);
     expect(text).toContain("Jeff has added nothing since");
-    expect(text).toContain("wrap up");
+    expect(text).toContain("move the exchange forward");
+    expect(text).not.toContain("wrap up");
   });
 });
 

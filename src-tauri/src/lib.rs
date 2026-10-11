@@ -734,6 +734,14 @@ fn migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
             sql: "ALTER TABLE messages ADD COLUMN interaction TEXT;",
         },
+        Migration {
+            version: 11,
+            description: "message_reactions",
+            kind: MigrationKind::Up,
+            // Humeur du personnage au moment de sa réplique : l'interface en
+            // tire le ton de la bulle, y compris dans l'historique.
+            sql: "ALTER TABLE messages ADD COLUMN reaction TEXT;",
+        },
     ]
 }
 

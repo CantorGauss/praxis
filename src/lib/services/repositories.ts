@@ -10,6 +10,7 @@ import type {
   Message,
   MessageKind,
   MessageInteraction,
+  MessageReaction,
   MessageStatus,
   ModelProfile,
   Persona,
@@ -17,7 +18,7 @@ import type {
 import { DEFAULT_SETTINGS, DEFAULT_TIMEOUT_MS } from "../types";
 import { detectLocale, isLocale, type Locale } from "../i18n/locales";
 import { getApiKey, setApiKey } from "./llmClient";
-import { neutralState } from "./emotion";
+import { MOODS, neutralState } from "./emotion";
 import { normalizeAppearance, type AvatarAppearance } from "./avatar";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./inference";
 import { decodeInteraction } from "./coordination";
@@ -118,6 +119,7 @@ export const settingsRepo = {
         "idleChatterSeconds",
         DEFAULT_SETTINGS.idleChatterSeconds,
       ),
+      sceneTwists: parse("sceneTwists", DEFAULT_SETTINGS.sceneTwists),
       historyWindowMessages,
     };
   },
@@ -770,6 +772,7 @@ type MessageRow = {
   kind: MessageKind | null;
   addressee: string | null;
   interaction: string | null;
+  reaction: string | null;
 };
 
 function messageFromRow(r: MessageRow): Message {
@@ -785,7 +788,24 @@ function messageFromRow(r: MessageRow): Message {
     personaName: r.persona_name,
     addressee: r.addressee,
     interaction: decodeInteraction(r.interaction),
+    reaction: decodeReaction(r.reaction),
   };
+}
+
+/** Une valeur illisible ou d'une humeur inconnue n'empêche pas l'affichage. */
+function decodeReaction(raw: string | null): MessageReaction | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<MessageReaction>;
+    if (!value.mood || !(MOODS as string[]).includes(value.mood)) return null;
+    const intensity = Number(value.intensity);
+    return {
+      mood: value.mood,
+      intensity: Number.isFinite(intensity) ? Math.min(1, Math.max(0, intensity)) : 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export type MessageSpeaker = { id: string; name: string } | null;
@@ -813,6 +833,7 @@ export const messageRepo = {
     speaker: MessageSpeaker = null,
     kind: MessageKind = "speech",
     addressee: string | null = null,
+    reaction: MessageReaction | null = null,
   ): Promise<Message> {
     const db = await getDb();
     const id = newId();
@@ -820,8 +841,8 @@ export const messageRepo = {
     await db.execute(
       `INSERT INTO messages
         (id, conversation_id, role, content, status, created_at,
-         persona_id, persona_name, kind, addressee)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+         persona_id, persona_name, kind, addressee, reaction)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         id,
         conversationId,
@@ -833,6 +854,7 @@ export const messageRepo = {
         speaker?.name ?? null,
         kind,
         addressee,
+        reaction ? JSON.stringify(reaction) : null,
       ],
     );
     return {
@@ -846,6 +868,7 @@ export const messageRepo = {
       personaId: speaker?.id ?? null,
       personaName: speaker?.name ?? null,
       addressee,
+      reaction,
     };
   },
 
