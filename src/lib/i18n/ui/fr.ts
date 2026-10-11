@@ -497,6 +497,12 @@ export const frUi: UiStrings = {
       "Si vous ne dites rien pendant ce temps, les personnages reprennent la " +
       "parole entre eux. 0 pour qu'ils attendent toujours votre message. Taper " +
       "dans la zone de saisie repousse l'échéance.",
+    sceneTwists: "Imprévus quand la scène tourne en rond",
+    sceneTwistsHint: (lines: number) =>
+      "Quand les personnages se répètent sans vous, le modèle écrit une " +
+      "didascalie qui relance la scène : une nouvelle qui tombe, un incident, " +
+      "un geste inattendu. Cela coûte une courte requête de plus, au plus une " +
+      `fois toutes les ${lines} répliques.`,
     characterBehaviour: "Comportement des personnages",
     defaultPersona: "Personnage proposé au démarrage d'une conversation",
     noneOption: "— Aucun —",
@@ -579,6 +585,7 @@ export const frUi: UiStrings = {
 
   app: {
     narrationSpeaker: "Scène",
+    generatedTwist: "Imprévu écrit par le modèle pour relancer la scène",
     personaWillEnter: (name: string) =>
       `${name} entrera dès la fin du tour en cours.`,
     personaWillLeave: (name: string) =>

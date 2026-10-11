@@ -6,6 +6,7 @@ import type {
   TemporalContext,
 } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
+import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
 import {
@@ -56,6 +57,8 @@ export type AssembleInput = {
   temporal: TemporalContext;
   summary: string | null;
   coordination?: string;
+  /** La scène tourne en rond : une consigne de relance clôt la requête. */
+  stagnation?: StagnationReason | null;
   recentMessages: Message[]; // du plus ancien au plus récent
   /** Situation de départ de la conversation, connue de tous les personnages. */
   sceneDescription?: string | null;
@@ -116,6 +119,7 @@ function buildSystemPrompt(
   }
 
   parts.push(a.emotionalPlay());
+  parts.push(a.momentum());
 
   const scene = input.scene;
   if (scene && scene.otherNames.length > 0) {
@@ -200,6 +204,8 @@ function buildVolatileBlock(input: AssembleInput): string {
   }
 
   if (input.coordination) volatileParts.push(input.coordination);
+
+  if (input.stagnation) volatileParts.push(a.stagnation(input.stagnation));
 
   // Les petits modèles suivent parfois mieux les faits proches de la
   // génération que les mêmes faits placés tôt dans le système. La situation

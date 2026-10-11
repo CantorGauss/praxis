@@ -15,6 +15,7 @@
     testConnection,
   } from "../services/llmClient";
   import { MAX_CONSECUTIVE_AI_TURNS } from "../services/scene";
+  import { TWIST_COOLDOWN_LINES } from "../services/twist";
   import { MODEL_CONTEXT_PRESETS } from "../services/inference";
   import type {
     ChatTextSize,
@@ -701,6 +702,17 @@
         onchange={() => void persist()}
       />
       <span class="hint">{s.settings.idleResumeHint}</span>
+    </div>
+    <div class="field checkbox">
+      <label>
+        <input
+          type="checkbox"
+          bind:checked={app.settings.sceneTwists}
+          onchange={() => void persist()}
+        />
+        {s.settings.sceneTwists}
+      </label>
+      <span class="hint">{s.settings.sceneTwistsHint(TWIST_COOLDOWN_LINES)}</span>
     </div>
   </section>
   <section>

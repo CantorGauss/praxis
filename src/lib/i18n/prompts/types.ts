@@ -17,6 +17,7 @@ export type PromptPack = {
   scene: ScenePrompts;
   assembler: AssemblerPrompts;
   director: DirectorPrompts;
+  twist: TwistPrompts;
   coordination: {
     analysisSystem: string;
     context(data: string): string;
@@ -87,6 +88,8 @@ export type AssemblerPrompts = {
   stableTraits(traits: string[]): string;
   responseLength(instruction: string): string;
   emotionalPlay(): string;
+  /** Ce qui pousse chaque réplique à faire avancer la scène. */
+  momentum(): string;
   startingSituation(situation: string): string;
   /** Rappel saillant placé juste avant la réponse, près de la dernière réplique. */
   sceneReminder(situation: string): string;
@@ -111,6 +114,8 @@ export type AssemblerPrompts = {
     elapsedLabel: string;
   }): string;
   thisTurn(addressing: string): string;
+  /** Relance quand les dernières répliques tournent en rond. */
+  stagnation(reason: StagnationReason): string;
   /** Erreur rendue à l'utilisateur, pas au modèle. */
   contextTooLong: string;
 };
@@ -122,6 +127,21 @@ export type DirectorPrompts = {
   transcriptLine(name: string, content: string): string;
   narrationLine(content: string): string;
   emptyTranscript: string;
+};
+
+/** Pourquoi la scène est jugée enlisée ; voir `detectStagnation`. */
+export type StagnationReason = "echo" | "low-novelty" | "consensus";
+
+export type TwistPrompts = {
+  system(input: { userName: string }): string;
+  user(input: {
+    situation: string | null;
+    summary: string | null;
+    roster: string;
+    transcript: string;
+  }): string;
+  /** Préfixes qu'un modèle ajoute volontiers et qu'on retire de la didascalie. */
+  stripPrefixes: readonly string[];
 };
 
 export type SummaryPrompts = {

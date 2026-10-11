@@ -181,6 +181,21 @@ export function noThinkingRequestParameters(
 }
 
 /**
+ * Pénalités de répétition par défaut des répliques. Sans elles, un modèle
+ * reprend vite les mêmes tournures et les mêmes idées d'une réplique à
+ * l'autre. Les valeurs restent modestes : plus fortes, elles finissent par
+ * pénaliser les mots outils et abîmer la grammaire, surtout en français.
+ *
+ * Ce sont des champs standard de l'API OpenAI, compris par les serveurs
+ * courants (llama.cpp, LM Studio, vLLM, OpenRouter). Un profil peut les
+ * remplacer ou les annuler par ses paramètres personnalisés.
+ */
+export const DEFAULT_REPETITION_PENALTIES = {
+  frequency_penalty: 0.2,
+  presence_penalty: 0.3,
+} as const;
+
+/**
  * Construit le corps de requête en n'incluant que les champs réellement
  * configurés : les serveurs locaux n'acceptent pas tous tous les paramètres.
  */
@@ -201,6 +216,7 @@ export function buildRequestBody(options: ChatRequestOptions): Record<string, un
   if (maxTokens) {
     body.max_tokens = maxTokens;
   }
+  Object.assign(body, DEFAULT_REPETITION_PENALTIES);
   // Praxis n'expose pas de mode réfléchi : le raisonnement est coupé pour
   // toutes les requêtes, y compris celles d'un profil personnalisé.
   Object.assign(

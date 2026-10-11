@@ -52,6 +52,14 @@ without waiting for your turn, even at the start of a scene. **Take the floor**
 or send a message to let the current line finish and join back in. This mode
 stays with the open conversation and overrides the usual automatic-turn limit.
 
+**When they go in circles, something happens.** Characters are told to move the
+scene forward — disagree, reveal, decide — rather than politely agree. If the
+last few lines still keep circling the same words, or everyone just nods along,
+the next speaker is nudged to shake things up. Left on their own, the model may
+also drop in a short stage direction of its own (marked ✦): news arriving, an
+incident, an unexpected gesture. At most once every eight lines, never right
+after you speak, and you can switch it off in Settings.
+
 **They're in a mood, and it lasts.** Before a character answers, Praxis works
 out how they'd actually feel about what just happened — startled, delighted,
 furious, quietly hurt — and that colours how they write. Drop something heavy on

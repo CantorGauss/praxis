@@ -7,6 +7,7 @@ import type {
   EmotionalReaction,
   EmotionalState,
   Message,
+  MessageReaction,
   Persona,
 } from "../types";
 import { DEFAULT_SETTINGS, USER_ADDRESSEE } from "../types";
@@ -63,6 +64,8 @@ import {
 import { promptPack } from "../i18n/prompts";
 import { setUiLocale, t } from "../i18n/ui.svelte";
 import { chooseSpeakers } from "../services/director";
+import { detectStagnation, linesSinceNarration } from "../services/stagnation";
+import { inventSceneTwist, TWIST_COOLDOWN_LINES } from "../services/twist";
 import { assessEmotionalReaction } from "../services/emotionAnalysis";
 import { newId } from "../services/db";
 import {
@@ -718,16 +721,22 @@ class AppState {
     await this.setParticipants(ids);
   }
 
-  /** Insère une didascalie : elle n'appartient à aucun locuteur. */
+  /**
+   * Insère une didascalie : elle n'appartient à aucun locuteur. Le rôle dit
+   * qui l'a écrite — l'utilisateur, ou le modèle pour un imprévu. Ce dernier
+   * ne remet donc pas à zéro le compteur de répliques autonomes : une scène
+   * laissée seule ne peut pas se relancer indéfiniment.
+   */
   private async addNarration(
     conversationId: string,
     text: string,
+    author: Message["role"] = "user",
   ): Promise<Message | null> {
     const content = text.trim();
     if (!content) return null;
     const message = await messageRepo.create(
       conversationId,
-      "user",
+      author,
       content,
       "complete",
       null,
@@ -1241,9 +1250,78 @@ class AppState {
 
   private lastSpeakerId(): string | null {
     return (
-      [...this.messages].reverse().find((m) => m.role === "assistant")?.personaId ??
+      [...this.messages]
+        .reverse()
+        .find((m) => m.role === "assistant" && m.kind === "speech")?.personaId ??
       null
     );
+  }
+
+  /**
+   * Insère un imprévu écrit par le modèle, si la scène en a besoin.
+   *
+   * `stagnation` : les personnages tournent en rond (voir `detectStagnation`).
+   * `lull` : en mode écoute, le metteur en scène ne voit plus personne qui
+   * aurait envie de parler.
+   *
+   * Seulement entre personnages — jamais juste après l'utilisateur, qui mène
+   * alors la scène — et pas plus d'une fois toutes les
+   * `TWIST_COOLDOWN_LINES` répliques. Retourne true si une didascalie a été
+   * ajoutée.
+   */
+  private async maybeInjectTwist(
+    conversationId: string,
+    trigger: "stagnation" | "lull",
+  ): Promise<boolean> {
+    if (!this.settings.sceneTwists || this.participants.length < 2) return false;
+    const last = this.messages[this.messages.length - 1];
+    if (!last || last.role !== "assistant" || last.kind !== "speech") return false;
+    if (linesSinceNarration(this.messages) < TWIST_COOLDOWN_LINES) return false;
+    if (
+      trigger === "stagnation" &&
+      !detectStagnation(this.messages, [
+        this.userName,
+        ...this.participants.map((p) => p.name),
+      ])
+    ) {
+      return false;
+    }
+    const target = this.target;
+    const modelId = this.activeModelId;
+    const conv = this.conversationById(conversationId);
+    if (!target || !modelId || !conv) return false;
+
+    this.directing = true;
+    try {
+      const profile = await profileRepo.get(modelId);
+      const text = await inventSceneTwist({
+        connection: target,
+        modelId,
+        participants: this.participants.map((p) => ({
+          name: p.name,
+          description: p.description,
+        })),
+        sceneDescription: conv.sceneDescription,
+        summary: conv.summary,
+        recentMessages: this.messages,
+        label: this.labelFor,
+        userName: this.userName,
+        extraParameters: profile.customParameters,
+        pack: this.pack,
+      });
+      if (
+        !text ||
+        this.turnAborted ||
+        this.currentConversationId !== conversationId ||
+        this.queuedMessage ||
+        this.pendingSceneActions.length
+      ) {
+        return false;
+      }
+      return (await this.addNarration(conversationId, text, "assistant")) !== null;
+    } finally {
+      this.directing = false;
+    }
   }
 
   /** Consigne de destinataire à donner à chaque locuteur du tour. */
@@ -1331,6 +1409,11 @@ class AppState {
     for (let step = 0; step < speakerIds.length; step++) {
       if (this.turnAborted || this.currentConversationId !== conversationId) return false;
       if (this.queuedMessage || this.pendingSceneActions.length) return true;
+      // Avant de choisir qui parle : si la scène tourne en rond, un imprévu
+      // change la donne, et le metteur en scène le voit déjà.
+      let twisted = fixedSpeakers ? false : await this.maybeInjectTwist(conversationId, "stagnation");
+      if (this.turnAborted || this.currentConversationId !== conversationId) return false;
+      if (this.queuedMessage || this.pendingSceneActions.length) return true;
       const fallback = step === 0 ? speakerIds : planContinuation(this.roster, this.lastSpeakerId());
       const last = this.messages[this.messages.length - 1];
       const chosen = fixedSpeakers ? [speakerIds[step]] : await this.decideSpeakers(fallback, {
@@ -1339,10 +1422,18 @@ class AppState {
       });
       if (this.turnAborted || this.currentConversationId !== conversationId) return false;
       if (this.queuedMessage || this.pendingSceneActions.length) return true;
+      // Personne n'a envie de parler alors que l'utilisateur écoute : plutôt
+      // qu'une réplique forcée sur un sujet mort, quelque chose arrive.
+      if (!fixedSpeakers && !twisted && chosen.length === 0 && this.userSilent && this.autonomousTurn) {
+        twisted = await this.maybeInjectTwist(conversationId, "lull");
+        if (this.turnAborted || this.currentConversationId !== conversationId) return false;
+        if (this.queuedMessage || this.pendingSceneActions.length) return true;
+      }
       // Explicit listening mode keeps its continuous one-line-at-a-time behavior.
       const speakerId = this.userSilent && this.autonomousTurn
         ? chosen.find((id) => id !== this.lastSpeakerId()) ?? fallback[0]
-        : chosen[0];
+        // Un imprévu appelle une réaction, même si le metteur en scène hésite.
+        : chosen[0] ?? (twisted ? fallback[0] : undefined);
       if (!speakerId) {
         this.sceneSettled = true;
         return true;
@@ -1364,7 +1455,8 @@ class AppState {
         conv,
         speaker,
         modelId,
-        step === 0 || fixedSpeakers ? addressing(speakerId) :
+        twisted ? describeSceneEvent(this.userName, this.pack) :
+          step === 0 || fixedSpeakers ? addressing(speakerId) :
           this.userSilent ? this.pack.scene.userSilentTurn(this.userName) : describeAutonomousTurn(this.userName, this.pack),
       );
       if (!done) return false;
@@ -1553,6 +1645,18 @@ class AppState {
     }
 
 
+    // Les personnages se répondent en boucle : la requête se clôt sur une
+    // consigne de relance. Jamais juste après l'utilisateur ou un imprévu, qui
+    // apportent déjà du neuf.
+    const lastMessage = this.messages[this.messages.length - 1];
+    const stagnation =
+      scene && lastMessage?.role === "assistant" && lastMessage.kind === "speech"
+        ? detectStagnation(this.messages, [
+            this.userName,
+            ...this.participants.map((p) => p.name),
+          ])
+        : null;
+
     const contextTokens = this.contextBudgetFor(modelId, profile.contextWindow).tokens;
     // La longueur choisie dans la fiche du personnage est une vraie limite,
     // jamais un simple indice visuel. Elle réserve la même place dans le prompt
@@ -1567,6 +1671,7 @@ class AppState {
       temporal,
       summary: conv.summary,
       coordination: scene ? this.coordination : undefined,
+      stagnation,
       recentMessages: recent,
       sceneDescription: conv.sceneDescription,
       contextTokens,
@@ -1599,12 +1704,22 @@ class AppState {
 
     if (this.turnAborted || this.currentConversationId !== conv.id) return false;
 
+    // Le ton affiché de la bulle : la réaction immédiate si elle a été
+    // évaluée, sinon l'humeur de fond, plus discrète.
+    const reaction: MessageReaction | null = immediateReaction
+      ? { mood: immediateReaction.mood, intensity: immediateReaction.intensity }
+      : state
+        ? { mood: state.mood, intensity: 0.3 }
+        : null;
     const assistantMessage = await messageRepo.create(
       conv.id,
       "assistant",
       "",
       "streaming",
       { id: speaker.id, name: speaker.name },
+      "speech",
+      null,
+      reaction,
     );
     if (this.turnAborted || this.currentConversationId !== conv.id) {
       await messageRepo.remove(assistantMessage.id);
@@ -1879,7 +1994,8 @@ class AppState {
     const conv = this.currentConversation;
     if (!conv) return;
     const last = this.messages[this.messages.length - 1];
-    if (!last || last.role !== "assistant") return;
+    // Un imprévu n'a pas de locuteur à faire rejouer.
+    if (!last || last.role !== "assistant" || last.kind !== "speech") return;
     const speaker =
       this.personaById(last.personaId) ?? this.activePersona;
     if (!speaker) return;
