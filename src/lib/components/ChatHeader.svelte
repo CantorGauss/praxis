@@ -120,6 +120,7 @@
       onclick={() => (app.castPanelOpen = !app.castPanelOpen)}
       title={s.chat.sceneButtonTitle}
     >
+      <span class="scene-icon" aria-hidden="true">🎬</span>
       {s.chat.scene}{app.participants.length > 0 ? ` (${app.participants.length})` : ""}
     </button>
     <div class="more-wrap">
@@ -282,8 +283,9 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 14px 22px;
-    border-bottom: 1px solid rgba(185, 141, 61, 0.13);
+    padding: 13px 22px;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
+    backdrop-filter: blur(10px);
     background: var(--chat-header-background);
     box-shadow: 0 14px 38px -24px var(--chat-header-shadow);
     z-index: 2;
@@ -296,12 +298,22 @@
 
   .avatar-stack :global(.avatar-wrap:not(:first-child)) {
     margin-left: -15px;
+    transition: margin 0.35s var(--spring);
+  }
+
+  /* Au survol, la troupe s'écarte pour se laisser voir. */
+  .avatar-stack:hover :global(.avatar-wrap:not(:first-child)) {
+    margin-left: 4px;
+  }
+
+  .scene-icon {
+    font-size: 13px;
   }
 
   .identity .name {
     font-family: var(--font-stage);
-    font-weight: 600;
-    font-size: 18px;
+    font-weight: 700;
+    font-size: 19px;
     letter-spacing: 0.01em;
     max-width: 320px;
     overflow: hidden;
@@ -321,7 +333,7 @@
     color: var(--text-soft);
     font-size: 12px;
     background: var(--compression-bg);
-    border-bottom: 1px solid rgba(185, 141, 61, 0.18);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   }
 
   .compression-track {
@@ -364,8 +376,22 @@
     background: var(--text-faint);
   }
 
+  /* Voyant « en scène » : il respire tant que le serveur répond. */
   .conn-dot.ok {
     background: var(--ok);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+    animation: on-air 2.4s ease-out infinite;
+  }
+
+  @keyframes on-air {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); }
+    70%, 100% { box-shadow: 0 0 0 7px transparent; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .conn-dot.ok {
+      animation: none;
+    }
   }
 
   .conn-dot.ko {
@@ -390,9 +416,21 @@
     width: 310px;
     padding: 8px;
     border: 1px solid var(--border);
-    border-radius: 13px;
+    border-radius: 16px;
     background: var(--menu-bg);
-    box-shadow: 0 20px 54px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 20px 54px rgba(0, 0, 0, 0.5);
+    animation: menu-pop 0.28s var(--spring) both;
+    transform-origin: top right;
+  }
+
+  @keyframes menu-pop {
+    from { opacity: 0; transform: translateY(-6px) scale(0.95); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .more-menu {
+      animation: none;
+    }
   }
 
   .menu-status {

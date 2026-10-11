@@ -105,7 +105,13 @@
 </script>
 
 <div class="onboarding">
+  <span class="glow one" aria-hidden="true"></span>
+  <span class="glow two" aria-hidden="true"></span>
   <div class="card">
+    <div class="hero" aria-hidden="true">🎭</div>
+    <div class="steps" aria-hidden="true">
+      <i class:on={step >= 1}></i><i class:on={step >= 2}></i>
+    </div>
     <h1>{s.onboarding.welcome}</h1>
     {#if step === 1}
       <p>{s.onboarding.intro}</p>
@@ -208,25 +214,91 @@
   .onboarding {
     position: fixed;
     inset: 0;
-    background: var(--bg);
+    overflow: hidden;
+    background: var(--body-background);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 100;
   }
 
+  /* Deux projecteurs colorés qui dérivent derrière la carte. */
+  .glow {
+    position: absolute;
+    width: 46vmax;
+    height: 46vmax;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.32;
+    pointer-events: none;
+  }
+
+  .glow.one {
+    left: -12vmax;
+    top: -14vmax;
+    background: var(--accent-2);
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+
+  .glow.two {
+    right: -14vmax;
+    bottom: -16vmax;
+    background: var(--accent-3);
+    animation: drift 17s ease-in-out infinite alternate-reverse;
+  }
+
   .card {
-    background: var(--bg-panel);
+    position: relative;
+    background:
+      radial-gradient(90% 40% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+      var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 32px;
-    width: min(480px, 92vw);
-    box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+    border-radius: 26px;
+    padding: 34px 34px 30px;
+    width: min(500px, 92vw);
+    max-height: 94vh;
+    overflow-y: auto;
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.55);
+    animation: card-in 0.6s var(--spring) both;
+  }
+
+  .hero {
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 14px;
+    border-radius: 20px;
+    background: var(--accent-gradient);
+    box-shadow: 0 12px 28px -10px var(--accent-glow);
+    font-size: 34px;
+    animation: hero-wave 3.2s ease-in-out 0.6s infinite;
+  }
+
+  .steps {
+    position: absolute;
+    top: 34px;
+    right: 34px;
+    display: flex;
+    gap: 6px;
+  }
+
+  .steps i {
+    width: 22px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-hover);
+    transition: background 0.3s;
+  }
+
+  .steps i.on {
+    background: var(--accent-gradient);
   }
 
   h1 {
     margin: 0 0 10px;
-    font-size: 24px;
+    font-family: var(--font-stage);
+    font-size: 28px;
   }
 
   p {
@@ -267,19 +339,47 @@
     flex: 1;
     padding: 8px 12px;
     border: 1px solid var(--border);
-    border-radius: 9px;
+    border-radius: 999px;
     background: transparent;
     color: var(--text-soft);
     font-size: 13.5px;
+    font-weight: 600;
+    transition:
+      background 0.2s,
+      transform 0.25s var(--spring);
   }
 
   .choice:hover {
     background: var(--bg-hover);
+    transform: translateY(-1px);
   }
 
   .choice.selected {
-    border-color: var(--accent);
-    background: var(--bg-active);
-    color: var(--text);
+    border-color: transparent;
+    background: var(--accent-gradient);
+    color: var(--accent-ink);
+  }
+
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  }
+
+  @keyframes hero-wave {
+    0%, 60%, 100% { transform: rotate(0); }
+    70% { transform: rotate(-12deg) scale(1.06); }
+    80% { transform: rotate(10deg) scale(1.06); }
+    90% { transform: rotate(-4deg); }
+  }
+
+  @keyframes drift {
+    to { transform: translate(8vmax, 6vmax) scale(1.1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow,
+    .card,
+    .hero {
+      animation: none;
+    }
   }
 </style>

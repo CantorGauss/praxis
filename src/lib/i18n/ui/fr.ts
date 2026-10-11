@@ -38,6 +38,7 @@ export const frUi: UiStrings = {
   },
 
   sidebar: {
+    tagline: "Un théâtre de poche",
     conversations: "Conversations",
     newConversation: "Nouvelle conversation",
     deleteConversation: "Supprimer la conversation",
@@ -51,14 +52,15 @@ export const frUi: UiStrings = {
   },
 
   curtain: {
-    title: "Aucune conversation ouverte",
+    title: "Le rideau est baissé",
     withCast:
-      "Ouvrez une conversation existante ou choisissez les personnages d’une nouvelle conversation.",
+      "Votre troupe attend en coulisses. Reprenez une scène à gauche, ou lancez-en une toute neuve.",
     withoutCast:
-      "Créez un premier personnage — un nom, une description et un caractère — avant de commencer.",
+      "La scène est vide. Inventez un premier personnage — un nom, une manie, un caractère — et le spectacle peut commencer.",
     createCharacter: "Créer un personnage",
+    raiseCurtain: "Lever le rideau",
     available: (count: number) =>
-      `${count} conversation${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} dans la colonne de gauche.`,
+      `${count} scène${count > 1 ? "s" : ""} en attente dans la colonne de gauche.`,
   },
 
   avatar: {
@@ -335,18 +337,31 @@ export const frUi: UiStrings = {
   newChat: {
     subtitle: "Choisissez les personnages. Vous pourrez modifier la scène à tout moment.",
     whoToTalkTo: "Avec qui voulez-vous discuter ?",
+    castingHint: "Cliquez pour distribuer les rôles — l'ordre de sélection fixe l'ordre de parole.",
     noCharacters: "Aucun personnage.",
     createOneFirst: "Créez-en un d'abord.",
     situation: "Situation",
     optional: "facultative",
     situationPlaceholder:
       "Où êtes-vous, à quel moment, que vient-il de se passer ?",
-    useExample: "Utiliser un exemple",
-    example:
+    examples: [
       "Un soir d'automne, dans le salon d'un vieil appartement. " +
-      "La pluie bat les fenêtres. Du thé refroidit sur la table et un livre " +
-      "reste ouvert sur le canapé, manifestement abandonné en pleine lecture. " +
-      "Personne n'a encore abordé le sujet qui fâche.",
+        "La pluie bat les fenêtres. Du thé refroidit sur la table et un livre " +
+        "reste ouvert sur le canapé, manifestement abandonné en pleine lecture. " +
+        "Personne n'a encore abordé le sujet qui fâche.",
+      "Un train de nuit s'est arrêté entre deux gares. Les lumières " +
+        "clignotent. Personne n'a franchi la porte du bout du wagon depuis " +
+        "vingt minutes.",
+      "Un concours de cuisine en direct. Il reste dix minutes au chrono, le " +
+        "four vient de rendre l'âme et le jury approche déjà.",
+      "Un ascenseur bloqué entre le 14e et le 15e étage d'une tour de " +
+        "bureaux, à 23 h. Quelqu'un vient d'avouer qu'il est claustrophobe.",
+      "Le dernier soir des vacances d'été, sur une plage. Le feu de camp " +
+        "s'éteint et quelqu'un a trouvé une lettre jamais ouverte dans le sable.",
+      "Le réfectoire d'un vaisseau spatial, six mois après le départ. La " +
+        "machine à café vient de lâcher et le moral est au plus bas.",
+    ],
+    surpriseMe: "Surprenez-moi",
     hideOptions: "Masquer",
     showOptions: "Afficher",
     advancedOptions: "les options avancées",
@@ -355,7 +370,7 @@ export const frUi: UiStrings = {
     speakingOrder: "Ordre de parole",
     pickAtLeastOne: "Choisissez au moins un personnage.",
     creating: "Création…",
-    start: "Commencer",
+    start: "Lever de rideau !",
   },
 
   fatal: {
@@ -366,6 +381,7 @@ export const frUi: UiStrings = {
   },
 
   settings: {
+    subtitle: "Tout reste sur votre machine — en coulisses, sous clé.",
     title: "Réglages",
     sectionsAria: "Rubriques des réglages",
     tabs: {

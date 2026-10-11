@@ -327,7 +327,7 @@
     gap: 2px;
     margin: 2px 0 12px;
     padding: 9px 10px;
-    border: 1px solid rgba(185, 141, 61, 0.34);
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
     border-radius: 9px;
     background: rgba(92, 63, 34, 0.2);
     color: var(--text-soft);

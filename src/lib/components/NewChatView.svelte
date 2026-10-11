@@ -46,6 +46,12 @@
 
   const ready = $derived(selected.length > 0);
 
+  /** Tire une situation au hasard, jamais deux fois la même d'affilée. */
+  function surprise() {
+    const pool = s.newChat.examples.filter((example) => example !== sceneDescription);
+    sceneDescription = pool[Math.floor(Math.random() * pool.length)];
+  }
+
   async function create() {
     if (!ready || creating) return;
     creating = true;
@@ -71,7 +77,8 @@
   </div>
 
   <section class="primary-section">
-    <h3>{s.newChat.whoToTalkTo}</h3>
+    <h3><span class="step" aria-hidden="true">1</span>{s.newChat.whoToTalkTo}</h3>
+    <p class="section-hint">{s.newChat.castingHint}</p>
     {#if app.personas.length === 0}
       <p class="empty">
         {s.newChat.noCharacters}
@@ -82,18 +89,24 @@
     {:else}
       <div class="character-grid">
         {#each app.personas as p (p.id)}
+          {@const order = selected.indexOf(p.id)}
           <button
             class="character-choice"
-            class:selected={selected.includes(p.id)}
+            class:selected={order !== -1}
             style:--speaker-c={personaAccent(p.id)}
+            aria-pressed={order !== -1}
             onclick={() => toggle(p.id)}
           >
-            <Avatar size={42} personaId={p.id} />
+            <span class="portrait">
+              <Avatar size={68} personaId={p.id} />
+              {#key order}
+                <span class="check">{order !== -1 ? order + 1 : "+"}</span>
+              {/key}
+            </span>
             <span class="who">
               <strong>{p.name}</strong>
               <small>{p.description ?? s.personas.noDescription}</small>
             </span>
-            <span class="check">{selected.includes(p.id) ? "✓" : "+"}</span>
           </button>
         {/each}
       </div>
@@ -101,7 +114,10 @@
   </section>
 
   <section>
-    <h3>{s.newChat.situation} <span class="optional">{s.newChat.optional}</span></h3>
+    <h3>
+      <span class="step" aria-hidden="true">2</span>{s.newChat.situation}
+      <span class="optional">{s.newChat.optional}</span>
+    </h3>
     <div class="field">
       <textarea
         id="nc-scene"
@@ -109,11 +125,10 @@
         bind:value={sceneDescription}
         placeholder={s.newChat.situationPlaceholder}
       ></textarea>
-      {#if !sceneDescription.trim()}
-        <button class="link" onclick={() => (sceneDescription = s.newChat.example)}>
-          {s.newChat.useExample}
-        </button>
-      {/if}
+      <button class="dice" onclick={surprise}>
+        <span class="dice-face" aria-hidden="true">🎲</span>
+        {s.newChat.surpriseMe}
+      </button>
     </div>
   </section>
 
@@ -157,6 +172,7 @@
       disabled={!ready || creating}
       onclick={() => void create()}
     >
+      {#if !creating}<span aria-hidden="true">🎬</span>{/if}
       {creating ? s.newChat.creating : s.newChat.start}
     </button>
   </div>
@@ -177,12 +193,34 @@
   }
 
   section {
-    margin-top: 22px;
+    margin-top: 26px;
   }
 
   h3 {
-    font-size: 14px;
-    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    margin: 0 0 4px;
+  }
+
+  /* Numéros d'étape : on suit le programme de la soirée. */
+  .step {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    color: var(--accent-ink);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .section-hint {
+    margin: 0 0 12px 31px;
+    color: var(--text-faint);
+    font-size: 12.5px;
   }
 
   .who {
@@ -217,85 +255,169 @@
     border-top: 1px solid var(--border-soft);
   }
 
+  .actions :global(.btn.primary) {
+    padding: 9px 22px;
+    font-size: 15px;
+  }
+
   .primary-section {
-    margin-top: 12px;
+    margin-top: 16px;
   }
 
   .character-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 12px;
   }
 
+  /* Cartes de casting : on choisit sa troupe comme on choisit ses cartes. */
   .character-choice {
+    position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 11px;
+    gap: 10px;
     min-width: 0;
-    padding: 10px 12px;
-    border: 1px solid var(--border-soft);
-    border-radius: 11px;
-    background: var(--bg-panel);
-    text-align: left;
+    padding: 18px 14px 15px;
+    border: 1.5px solid var(--border-soft);
+    border-radius: 20px;
+    background:
+      radial-gradient(90% 60% at 50% 0%, color-mix(in srgb, var(--speaker-c) 14%, transparent), transparent 70%),
+      var(--bg-panel);
+    text-align: center;
+    transition:
+      transform 0.3s var(--spring),
+      border-color 0.2s,
+      box-shadow 0.3s;
   }
 
   .character-choice:hover {
-    border-color: var(--border);
-    background: var(--bg-hover);
+    border-color: color-mix(in srgb, var(--speaker-c) 50%, var(--border));
+    transform: translateY(-3px) rotate(-0.6deg);
+    box-shadow: 0 16px 30px -18px color-mix(in srgb, var(--speaker-c) 80%, transparent);
+  }
+
+  .character-choice:active {
+    transform: scale(0.97);
   }
 
   .character-choice.selected {
     border-color: var(--speaker-c);
-    box-shadow: inset 3px 0 var(--speaker-c);
+    background:
+      radial-gradient(100% 70% at 50% 0%, color-mix(in srgb, var(--speaker-c) 26%, transparent), transparent 75%),
+      var(--bg-panel);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--speaker-c) 22%, transparent),
+      0 18px 34px -20px var(--speaker-c);
+  }
+
+  .portrait {
+    position: relative;
+    display: inline-flex;
   }
 
   .character-choice .who {
     display: flex;
     flex-direction: column;
+    gap: 2px;
+    width: 100%;
   }
 
   .character-choice strong {
     overflow: hidden;
     color: var(--text);
-    font-size: 13.5px;
+    font-family: var(--font-stage);
+    font-size: 16px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .character-choice small {
+    display: -webkit-box;
     overflow: hidden;
     color: var(--text-faint);
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 11.5px;
+    line-height: 1.4;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
+  /* Pastille : « + » pour inviter, puis le rang de passage. */
   .check {
-    width: 22px;
-    height: 22px;
+    position: absolute;
+    right: -6px;
+    bottom: -4px;
+    z-index: 2;
+    width: 26px;
+    height: 26px;
     display: grid;
-    flex: 0 0 22px;
     place-items: center;
-    border: 1px solid var(--border);
+    border: 2px solid var(--bg-panel);
     border-radius: 50%;
-    color: var(--text-faint);
+    background: var(--bg-hover);
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: 800;
   }
 
   .selected .check {
-    color: var(--accent-ink);
-    border-color: var(--accent);
-    background: var(--accent);
+    color: #fff;
+    background: var(--speaker-c);
+    animation: check-pop 0.4s var(--spring);
+  }
+
+  @keyframes check-pop {
+    from { transform: scale(0.3) rotate(-40deg); }
   }
 
   .optional {
-    margin-left: 5px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--bg-hover);
     color: var(--text-faint);
     font-size: 11px;
-    font-weight: 400;
+    font-weight: 500;
+  }
+
+  section .field {
+    margin-top: 10px;
+  }
+
+  .dice {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 4px;
+    padding: 5px 13px 5px 9px;
+    border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .dice:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .dice-face {
+    display: inline-block;
+    font-size: 15px;
+    transition: transform 0.5s var(--spring);
+  }
+
+  .dice:hover .dice-face {
+    transform: rotate(200deg) scale(1.15);
+  }
+
+  .dice:active .dice-face {
+    transform: rotate(380deg) scale(0.9);
   }
 
   .options-toggle {
-    margin-top: 8px;
+    margin-top: 14px;
     color: var(--text-soft);
     font-size: 12.5px;
   }
@@ -339,5 +461,16 @@
 
   .order-row button:hover:not(:disabled) {
     color: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .character-choice,
+    .dice-face {
+      transition: none;
+    }
+
+    .selected .check {
+      animation: none;
+    }
   }
 </style>
