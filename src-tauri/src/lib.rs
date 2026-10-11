@@ -110,8 +110,7 @@ fn endpoint(base: &url::Url, path: &str) -> String {
 }
 
 fn build_client(timeout_ms: Option<u64>) -> Result<reqwest::Client, String> {
-    let mut builder =
-        reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
+    let mut builder = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
     if let Some(ms) = timeout_ms {
         builder = builder.timeout(std::time::Duration::from_millis(ms));
     }
@@ -155,10 +154,7 @@ async fn test_connection(
     if resp.status().is_success() {
         Ok(true)
     } else {
-        Err(format!(
-            "The server replied with status {}",
-            resp.status()
-        ))
+        Err(format!("The server replied with status {}", resp.status()))
     }
 }
 
@@ -176,10 +172,7 @@ async fn list_models(
         .await
         .map_err(|e| humanize_reqwest_error(&e))?;
     if !resp.status().is_success() {
-        return Err(format!(
-            "The server replied with status {}",
-            resp.status()
-        ));
+        return Err(format!("The server replied with status {}", resp.status()));
     }
     resp.json::<serde_json::Value>()
         .await
@@ -409,8 +402,8 @@ fn get_api_key(connection_id: Option<String>) -> Result<Option<String>, String> 
     }
     // Repli sur l'entrée créée sous l'ancien nom, recopiée sous le nouveau.
     // L'ancienne est laissée en place : c'est le trousseau de l'utilisateur.
-    let legacy = keyring::Entry::new(KEYRING_SERVICE_LEGACY, KEYRING_USER)
-        .map_err(|e| e.to_string())?;
+    let legacy =
+        keyring::Entry::new(KEYRING_SERVICE_LEGACY, KEYRING_USER).map_err(|e| e.to_string())?;
     match legacy.get_password() {
         Ok(p) => {
             let _ = entry.set_password(&p);
@@ -633,10 +626,10 @@ async fn import_backup(
 fn migrations() -> Vec<Migration> {
     vec![
         Migration {
-        version: 1,
-        description: "schema_initial",
-        kind: MigrationKind::Up,
-        sql: r#"
+            version: 1,
+            description: "schema_initial",
+            kind: MigrationKind::Up,
+            sql: r#"
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
