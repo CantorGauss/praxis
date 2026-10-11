@@ -167,15 +167,17 @@
 <main class="messages" bind:this={listEl} onscroll={onListScroll}>
     {#if app.currentConversation?.sceneDescription}
       <div class="situation">
-        <span class="situation-label">{s.chat.startingSituation}</span>
+        <span class="situation-label"><span aria-hidden="true">🎬</span> {s.chat.startingSituation}</span>
         {app.currentConversation.sceneDescription}
       </div>
     {/if}
     {#if app.messages.length === 0}
       <div class="welcome">
         <div class="welcome-avatars">
-          {#each app.participants.slice(0, 4) as p (p.id)}
-            <Avatar size={96} personaId={p.id} />
+          {#each app.participants.slice(0, 4) as p, i (p.id)}
+            <span class="welcome-actor" style:--i={i}>
+              <Avatar size={96} personaId={p.id} />
+            </span>
           {/each}
           {#if app.participants.length === 0}
             <Avatar size={96} />
@@ -376,15 +378,20 @@
     padding: 7px 16px;
     border-radius: 999px;
     font-size: 12.5px;
-    color: var(--text);
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent-gradient);
+    box-shadow: 0 10px 26px -8px var(--accent-glow);
     cursor: pointer;
+    animation: jump-in 0.4s var(--spring) both;
   }
 
   .jump-bottom:hover {
-    border-color: var(--accent-soft);
+    filter: brightness(1.06);
+  }
+
+  @keyframes jump-in {
+    from { opacity: 0; transform: translate(-50%, 12px) scale(0.9); }
   }
 
   .messages {
@@ -403,6 +410,8 @@
   .welcome {
     margin: auto;
     text-align: center;
+    font-family: var(--font-stage);
+    font-size: 17px;
     color: var(--text-soft);
     display: flex;
     flex-direction: column;
@@ -414,6 +423,20 @@
   .welcome-avatars {
     display: flex;
     gap: 14px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .welcome-actor {
+      animation:
+        avatar-hop 0.6s var(--spring) both,
+        welcome-bob 3s ease-in-out 0.8s infinite;
+      animation-delay: calc(var(--i) * 0.12s), calc(0.8s + var(--i) * 0.4s);
+    }
+  }
+
+  @keyframes welcome-bob {
+    0%, 100% { translate: 0 0; }
+    50% { translate: 0 -6px; }
   }
 
   .message {
@@ -440,6 +463,11 @@
 
   .avatar-slot {
     flex-shrink: 0;
+    transition: transform 0.35s var(--spring);
+  }
+
+  .message:hover .avatar-slot {
+    transform: rotate(-5deg) scale(1.05);
   }
 
   .column {
@@ -463,10 +491,14 @@
 
   .speaker .from {
     font-family: var(--font-stage);
-    font-weight: 600;
+    font-weight: 700;
     font-variant: small-caps;
     letter-spacing: 0.04em;
     color: var(--speaker-c);
+    padding: 0 9px 1px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--speaker-c) 14%, transparent);
+    white-space: nowrap;
   }
 
   .speaker .arrow {
@@ -492,7 +524,7 @@
     font-size: var(--chat-font-size);
     line-height: 1.65;
     padding: var(--bubble-padding);
-    border-radius: 16px;
+    border-radius: 20px;
     white-space: pre-wrap;
     word-break: break-word;
     border: 1px solid var(--bubble-border);
@@ -502,19 +534,21 @@
       box-shadow 0.4s ease;
   }
 
+  /* La voix de l'utilisateur : la couleur de la rampe, en lavis. */
   .message.user .bubble {
     background:
-      linear-gradient(155deg, rgba(111, 72, 91, 0.13), transparent 62%),
+      linear-gradient(135deg, rgba(255, 191, 71, 0.16), rgba(255, 95, 143, 0.14)),
       var(--bg-user-bubble);
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 12px 26px -19px var(--bubble-shadow);
+    border-color: color-mix(in srgb, var(--accent-2) 22%, transparent);
+    border-bottom-right-radius: 6px;
+    box-shadow: 0 14px 30px -20px var(--accent-glow);
   }
 
   .message.assistant .bubble {
     background:
       linear-gradient(145deg, var(--tone-wash, rgba(92, 58, 75, 0.1)), transparent 64%),
       var(--bg-assistant-bubble);
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 6px;
     box-shadow: 0 12px 28px -19px var(--bubble-shadow);
   }
 
@@ -572,11 +606,11 @@
   }
 
   .message.user .bubble.say-laugh {
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: 6px;
   }
 
   .message.assistant .bubble.say-laugh {
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 6px;
   }
 
   /* Points de suspension pendant que le personnage cherche ses mots. */
@@ -618,7 +652,7 @@
 
   /* En scène de groupe, un liseré coloré identifie le locuteur d'un coup d'œil. */
   .bubble.tinted {
-    border-left: 2px solid var(--speaker-c);
+    border-left: 3px solid var(--speaker-c);
   }
 
   .bubble.cancelled {
@@ -684,7 +718,7 @@
   }
 
   .actions.indented {
-    padding-left: 79px;
+    padding-left: 75px;
   }
 
   .message:hover .actions {
@@ -692,12 +726,18 @@
   }
 
   .actions button {
+    padding: 1px 9px;
+    border-radius: 999px;
     font-size: 11.5px;
     color: var(--text-faint);
+    transition:
+      color 0.15s,
+      background 0.15s;
   }
 
   .actions button:hover {
     color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
   /* Décor commun, affiché en tête : connu de tous, dit par personne. */
@@ -706,10 +746,10 @@
     align-self: center;
     max-width: 86%;
     background: var(--situation-bg);
-    border: 1px solid rgba(185, 141, 61, 0.14);
-    border-radius: var(--radius);
+    border: 1px dashed color-mix(in srgb, var(--accent) 32%, transparent);
+    border-radius: 16px;
     padding: 12px 18px;
-    font-size: 12.5px;
+    font-size: 13px;
     line-height: 1.5;
     color: var(--text-soft);
     white-space: pre-wrap;
@@ -717,11 +757,12 @@
 
   .situation-label {
     display: block;
+    font-family: var(--font);
     font-size: 10.5px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    color: var(--accent);
     margin-bottom: 4px;
   }
 
@@ -732,23 +773,30 @@
     max-width: 78%;
     text-align: center;
     font-style: italic;
-    font-size: 12.5px;
-    color: #9c8c7f;
-    padding: 7px 18px;
-    border-top: 1px solid rgba(185, 141, 61, 0.12);
-    border-bottom: 1px solid rgba(185, 141, 61, 0.12);
+    font-size: 13.5px;
+    color: var(--text-soft);
+    padding: 8px 22px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--accent) 9%, transparent) 20%,
+      color-mix(in srgb, var(--accent) 9%, transparent) 80%,
+      transparent
+    );
   }
 
   /* Imprévu écrit par le modèle : même didascalie, signée d'un astérisme. */
   .narration.generated::before {
-    content: "✦ ";
+    content: "✦";
+    margin-right: 6px;
     display: inline-block;
     font-style: normal;
-    color: rgba(185, 141, 61, 0.7);
+    color: var(--accent);
   }
 
   .narration.generated {
-    border-color: rgba(185, 141, 61, 0.24);
+    color: var(--text);
   }
 
   .idle-hint {
@@ -762,10 +810,16 @@
   }
 
   .idle-hint button {
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     font-size: 11.5px;
     color: var(--accent);
-    text-decoration: underline;
     font-style: normal;
+  }
+
+  .idle-hint button:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
   .turn-status {

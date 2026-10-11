@@ -269,6 +269,7 @@
   {/if}
 
   <div class="me">
+    <span class="me-icon" aria-hidden="true">🙋</span>
     <div>
       <label for="p-username">{s.personas.yourName}</label>
       <span class="hint">{s.personas.yourNameHint}</span>
@@ -357,7 +358,7 @@
             }}
             title={s.personas.showAllPortraits}
           >
-            {s.personas.choosePortrait}
+            <span aria-hidden="true">🖼️</span> {s.personas.choosePortrait}
           </button>
           <button
             onclick={() => {
@@ -366,10 +367,10 @@
             }}
             title={s.personas.responseStyleTitle}
           >
-            {showAdvanced ? s.personas.closeSettings : s.personas.responseStyle}
+            <span aria-hidden="true">🎚️</span> {showAdvanced ? s.personas.closeSettings : s.personas.responseStyle}
           </button>
           <button class="danger-link" onclick={() => void askDelete(p)}>
-            {s.common.delete}
+            <span aria-hidden="true">🗑️</span> {s.common.delete}
           </button>
         </div>
       </div>
@@ -665,7 +666,7 @@
 
   .me {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) minmax(180px, 280px) auto;
+    grid-template-columns: auto minmax(180px, 1fr) minmax(180px, 280px) auto;
     align-items: center;
     gap: 12px;
     background: var(--bg-panel);
@@ -673,6 +674,16 @@
     border-radius: var(--radius);
     padding: 14px 16px;
     margin-bottom: 18px;
+  }
+
+  .me-icon {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: var(--bg-hover);
+    font-size: 20px;
   }
 
   .me label {
@@ -692,12 +703,20 @@
     line-height: 1.45;
   }
 
+  /* Fiche de personnage : un bandeau à sa couleur, comme une affiche. */
   .card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius);
-    padding: 14px 16px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--persona-accent) 20%, transparent),
+        transparent 120px
+      ),
+      var(--bg-panel);
+    border: 1px solid color-mix(in srgb, var(--persona-accent) 26%, var(--border-soft));
+    border-radius: 20px;
+    padding: 18px 18px 16px;
     min-width: 0;
+    box-shadow: 0 22px 50px -32px color-mix(in srgb, var(--persona-accent) 70%, transparent);
   }
 
   .persona-workspace {
@@ -713,7 +732,7 @@
     gap: 4px;
     padding: 6px;
     border: 1px solid var(--border-soft);
-    border-radius: var(--radius);
+    border-radius: 18px;
     background: var(--bg-sidebar);
   }
 
@@ -723,13 +742,21 @@
     gap: 9px;
     min-width: 0;
     padding: 8px;
-    border-radius: 9px;
+    border-radius: 12px;
     color: var(--text-soft);
     text-align: left;
+    transition:
+      background 0.2s,
+      transform 0.25s var(--spring);
   }
 
   .persona-list-item:hover {
     background: var(--bg-hover);
+    transform: translateX(2px);
+  }
+
+  .persona-list-item:hover img {
+    transform: rotate(-8deg) scale(1.06);
   }
 
   .persona-list-item.selected {
@@ -739,10 +766,11 @@
       color-mix(in srgb, var(--persona-accent) 18%, var(--bg-active)),
       var(--bg-active)
     );
-    box-shadow: inset 3px 0 var(--persona-accent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--persona-accent) 40%, transparent);
   }
 
   .persona-list-item img {
+    transition: transform 0.3s var(--spring);
     width: 38px;
     height: 38px;
     flex: 0 0 38px;
@@ -765,7 +793,8 @@
   }
 
   .persona-list-item strong {
-    font-size: 13px;
+    font-family: var(--font-stage);
+    font-size: 14px;
   }
 
   .persona-list-item small {
@@ -774,21 +803,32 @@
   }
 
   .card-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 6px 16px;
+    margin-bottom: 12px;
+  }
+
+  .card-head .portrait {
+    grid-row: span 2;
   }
 
   .portrait {
-    width: 52px;
-    height: 52px;
+    width: 84px;
+    height: 84px;
     border-radius: 50%;
     flex-shrink: 0;
     object-fit: cover;
     box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--persona-accent) 68%, transparent),
-      0 7px 18px rgba(0, 0, 0, 0.28);
+      0 0 0 3px var(--bg-panel),
+      0 0 0 5px var(--persona-accent),
+      0 12px 26px -8px color-mix(in srgb, var(--persona-accent) 70%, transparent);
+    transition: transform 0.4s var(--spring);
+  }
+
+  .portrait:hover {
+    transform: rotate(-6deg) scale(1.05);
   }
 
   .identity {
@@ -812,8 +852,8 @@
 
   .name-input {
     font-family: var(--font-stage);
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: 700;
   }
 
   .desc-input {
@@ -860,33 +900,47 @@
   }
 
   .gender.on {
-    background: var(--bg-active);
-    border-color: var(--accent-soft);
-    color: var(--text);
+    background: var(--accent-gradient);
+    border-color: transparent;
+    color: var(--accent-ink);
+    font-weight: 700;
   }
 
   .card-actions {
     display: flex;
-    gap: 12px;
-    flex-shrink: 0;
-    padding-top: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+    padding-left: 4px;
   }
 
   .card-actions button {
+    padding: 4px 11px;
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
     font-size: 12px;
-    color: var(--text-faint);
+    color: var(--text-soft);
+    transition:
+      color 0.15s,
+      border-color 0.15s,
+      transform 0.25s var(--spring);
   }
 
   .card-actions button:hover {
     color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    transform: translateY(-1px);
   }
 
   .card-actions .active-action {
     color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   }
 
   .danger-link:hover {
     color: var(--danger) !important;
+    border-color: var(--danger-border) !important;
   }
 
   .avatar-picker {
@@ -900,7 +954,7 @@
         color-mix(in srgb, var(--persona-accent) 14%, transparent),
         transparent 38%
       ),
-      #161119;
+      var(--bg-sidebar);
   }
 
   .avatar-picker-head {
