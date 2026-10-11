@@ -92,6 +92,8 @@ export type AssemblerPrompts = {
   sceneReminder(situation: string): string;
   writingConventions(userName: string, userGender: Gender): string;
   conversationSummary(summary: string): string;
+  /** Le personnage n'a pas assisté à toute la scène : il ignore ce qu'il a manqué. */
+  partialPresence(): string;
   immediateReaction(input: {
     moodLabel: string;
     intensityPercent: number;

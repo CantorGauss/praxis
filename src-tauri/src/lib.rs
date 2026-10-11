@@ -734,6 +734,37 @@ fn migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
             sql: "ALTER TABLE messages ADD COLUMN interaction TEXT;",
         },
+        Migration {
+            version: 11,
+            description: "conversation_presence",
+            kind: MigrationKind::Up,
+            // Périodes de présence d'un personnage dans la scène : il ne connaît
+            // que ce qui s'est dit pendant qu'il était là. `entered_at` NULL =
+            // présent depuis le début ; `left_at` NULL = toujours là.
+            // Les arrivées passées ne sont pas reconstructibles : les
+            // participants existants sont réputés présents depuis le début.
+            sql: r#"
+            CREATE TABLE IF NOT EXISTS conversation_presence (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL
+                    REFERENCES conversations(id) ON DELETE CASCADE,
+                persona_id TEXT NOT NULL
+                    REFERENCES personas(id) ON DELETE CASCADE,
+                entered_at TEXT,
+                left_at TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_presence_conversation
+                ON conversation_presence(conversation_id);
+
+            INSERT INTO conversation_presence
+                (conversation_id, persona_id, entered_at, left_at)
+            SELECT conversation_id, persona_id, NULL,
+                CASE WHEN active = 1 THEN NULL
+                     ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END
+            FROM conversation_personas;
+        "#,
+        },
     ]
 }
 

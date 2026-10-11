@@ -16,6 +16,7 @@ import {
   emotionRepo,
   messageRepo,
   participantRepo,
+  presenceRepo,
   personaRepo,
   profileRepo,
   avatarRepo,
@@ -34,6 +35,7 @@ import {
 import { buildTemporalContext } from "../services/temporal";
 import { applyDecay, neutralState } from "../services/emotion";
 import { assemblePrompt, type SceneInput } from "../services/promptAssembler";
+import { knowledgeFor, type PresenceSpan } from "../services/presence";
 import {
   needsSummary,
   rebuildSummary,
@@ -113,6 +115,8 @@ class AppState {
   participantIds = $state<string[]>([]);
   /** Composition de chaque conversation, pour la barre latérale. */
   participantsByConversation = $state<Record<string, string[]>>({});
+  /** Périodes de présence de la scène courante : qui a vu quoi. */
+  private presenceSpans: PresenceSpan[] = [];
 
   /** État émotionnel et avatars par persona : chaque personnage a les siens. */
   emotionalStates = $state<Record<string, EmotionalState>>({});
@@ -135,7 +139,12 @@ class AppState {
   }
 
   private get coordination(): string {
-    return coordinationContext(this.messages, [
+    return this.coordinationFrom(this.messages);
+  }
+
+  /** Propositions en cours, telles qu'un personnage a pu les entendre. */
+  private coordinationFrom(messages: Message[]): string {
+    return coordinationContext(messages, [
       ...this.roster, { id: USER_ADDRESSEE, name: this.userName },
     ], this.pack);
   }
@@ -602,6 +611,7 @@ class AppState {
       ...this.participantsByConversation,
       [id]: participants.map((p) => p.personaId),
     };
+    this.presenceSpans = await presenceRepo.list(id);
     this.composerTargetId = null;
     await this.refreshEmotionalState();
   }
@@ -617,6 +627,7 @@ class AppState {
     this.interactionAttempts.clear();
     this.messages = [];
     this.participantIds = [];
+    this.presenceSpans = [];
     this.composerTargetId = null;
     this.lastPromptTokens = null;
     this.lastPromptContextTokens = null;
@@ -659,14 +670,16 @@ class AppState {
   }
 
   /**
-   * Redéfinit la scène d'une conversation. Un personnage qui rejoint ne voit
-   * que le résumé et les messages récents ; un personnage qui part laisse ses
-   * répliques dans l'historique.
+   * Redéfinit la scène d'une conversation. Un personnage qui rejoint une
+   * scène déjà commencée ne connaît que ce qui se dit à partir de son
+   * arrivée ; un personnage qui part laisse ses répliques dans l'historique.
    */
   async setParticipants(personaIds: string[]): Promise<void> {
     const conv = this.currentConversation;
     if (!conv || personaIds.length === 0) return;
-    await participantRepo.replace(conv.id, personaIds);
+    const enteredAt = this.messages.length > 0 ? new Date().toISOString() : null;
+    await participantRepo.replace(conv.id, personaIds, enteredAt);
+    this.presenceSpans = await presenceRepo.list(conv.id);
     this.participantIds = personaIds;
     if (this.userSilent && !this.isGroupConversation) this.reclaimFloor();
     this.participantsByConversation = {
@@ -742,8 +755,8 @@ class AppState {
   /**
    * Fait entrer un personnage en cours de conversation. La didascalie est
    * rédigée par l'utilisateur : c'est elle qui informe les autres personnages
-   * de l'arrivée, l'entrant retrouvant le fil par le résumé et les messages
-   * récents.
+   * de l'arrivée. L'entrant ne sait rien de ce qui s'est dit avant : il ne
+   * voit l'historique qu'à partir de cette didascalie.
    */
   async enterScene(
     personaId: string,
@@ -765,6 +778,7 @@ class AppState {
     if (this.participantIds.includes(personaId)) return;
 
     await participantRepo.join(conv.id, personaId);
+    this.presenceSpans = await presenceRepo.list(conv.id);
     const participants = await participantRepo.list(conv.id);
     this.participantIds = participants.filter((p) => p.active).map((p) => p.personaId);
     this.participantsByConversation = {
@@ -798,6 +812,7 @@ class AppState {
     if (!this.participantIds.includes(personaId)) return;
 
     await participantRepo.leave(conv.id, personaId);
+    this.presenceSpans = await presenceRepo.list(conv.id);
     this.participantIds = this.participantIds.filter((id) => id !== personaId);
     if (this.userSilent && !this.isGroupConversation) this.reclaimFloor();
     this.participantsByConversation = {
@@ -1491,7 +1506,14 @@ class AppState {
         : null;
 
     const profile = await profileRepo.get(modelId);
-    const recent = uncoveredMessages(this.messages, conv.summaryThroughMessageId);
+    // Le personnage ne connaît que ce qui s'est dit en sa présence.
+    const knowledge = knowledgeFor(
+      this.messages,
+      this.presenceSpans,
+      speaker.id,
+      conv.summaryThroughMessageId,
+    );
+    const recent = knowledge.recent;
 
     // Ce à quoi le personnage réagit : dernier bloc non signé de lui. Cette
     // évaluation précède la génération pour affecter la réplique en cours.
@@ -1565,9 +1587,10 @@ class AppState {
       state,
       immediateReaction,
       temporal,
-      summary: conv.summary,
-      coordination: scene ? this.coordination : undefined,
+      summary: knowledge.summaryKnown ? conv.summary : null,
+      coordination: scene ? this.coordinationFrom(knowledge.seen) : undefined,
       recentMessages: recent,
+      missedEarlier: knowledge.missedSome,
       sceneDescription: conv.sceneDescription,
       contextTokens,
       reserveOutputTokens: replyTokenBudget,

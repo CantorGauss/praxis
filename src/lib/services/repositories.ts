@@ -21,6 +21,7 @@ import { neutralState } from "./emotion";
 import { normalizeAppearance, type AvatarAppearance } from "./avatar";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./inference";
 import { decodeInteraction } from "./coordination";
+import type { PresenceSpan } from "./presence";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -603,7 +604,7 @@ export const conversationRepo = {
        VALUES ($1,$2,$3,$4,$5,$6)`,
       [id, personaId, title, sceneDescription, now, now],
     );
-    await participantRepo.replace(id, participantIds);
+    await participantRepo.replace(id, participantIds, null);
     return {
       id,
       personaId,
@@ -654,6 +655,9 @@ export const conversationRepo = {
     await db.execute("DELETE FROM conversation_personas WHERE conversation_id = $1", [
       id,
     ]);
+    await db.execute("DELETE FROM conversation_presence WHERE conversation_id = $1", [
+      id,
+    ]);
     await db.execute("DELETE FROM conversations WHERE id = $1", [id]);
   },
 };
@@ -697,8 +701,17 @@ export const participantRepo = {
     return rows.map(participantFromRow);
   },
 
-  /** Remplace la scène ; l'ordre du tableau devient l'ordre de parole. */
-  async replace(conversationId: string, personaIds: string[]): Promise<void> {
+  /**
+   * Remplace la scène ; l'ordre du tableau devient l'ordre de parole.
+   * `enteredAt` date l'arrivée des nouveaux venus — null s'ils sont là depuis
+   * le début, c'est-à-dire avant la première réplique.
+   */
+  async replace(
+    conversationId: string,
+    personaIds: string[],
+    enteredAt: string | null,
+  ): Promise<void> {
+    await presenceRepo.sync(conversationId, personaIds, enteredAt);
     const db = await getDb();
     await db.execute("DELETE FROM conversation_personas WHERE conversation_id = $1", [
       conversationId,
@@ -737,6 +750,7 @@ export const participantRepo = {
       "SELECT persona_id FROM conversation_personas WHERE conversation_id = $1 AND persona_id = $2",
       [conversationId, personaId],
     );
+    await presenceRepo.enter(conversationId, personaId, nowIso());
     if (existing.length > 0) {
       await this.setActive(conversationId, personaId, true);
       return;
@@ -755,6 +769,78 @@ export const participantRepo = {
   /** Fait sortir un personnage : il ne parle plus, ses répliques restent. */
   async leave(conversationId: string, personaId: string): Promise<void> {
     await this.setActive(conversationId, personaId, false);
+    await presenceRepo.leave(conversationId, personaId, nowIso());
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Présences : ce que chaque personnage a pu voir de la scène
+// ---------------------------------------------------------------------------
+
+type PresenceRow = {
+  persona_id: string;
+  entered_at: string | null;
+  left_at: string | null;
+};
+
+export const presenceRepo = {
+  async list(conversationId: string): Promise<PresenceSpan[]> {
+    const db = await getDb();
+    const rows = await db.select<PresenceRow[]>(
+      "SELECT persona_id, entered_at, left_at FROM conversation_presence WHERE conversation_id = $1 ORDER BY id ASC",
+      [conversationId],
+    );
+    return rows.map((r) => ({
+      personaId: r.persona_id,
+      enteredAt: r.entered_at,
+      leftAt: r.left_at,
+    }));
+  },
+
+  /** Ouvre une période de présence, sauf si le personnage est déjà là. */
+  async enter(
+    conversationId: string,
+    personaId: string,
+    at: string | null,
+  ): Promise<void> {
+    const db = await getDb();
+    const open = await db.select<{ id: number }[]>(
+      "SELECT id FROM conversation_presence WHERE conversation_id = $1 AND persona_id = $2 AND left_at IS NULL",
+      [conversationId, personaId],
+    );
+    if (open.length > 0) return;
+    await db.execute(
+      `INSERT INTO conversation_presence (conversation_id, persona_id, entered_at, left_at)
+       VALUES ($1,$2,$3,NULL)`,
+      [conversationId, personaId, at],
+    );
+  },
+
+  async leave(conversationId: string, personaId: string, at: string): Promise<void> {
+    const db = await getDb();
+    await db.execute(
+      "UPDATE conversation_presence SET left_at = $3 WHERE conversation_id = $1 AND persona_id = $2 AND left_at IS NULL",
+      [conversationId, personaId, at],
+    );
+  },
+
+  /** Aligne les présences sur une nouvelle distribution. */
+  async sync(
+    conversationId: string,
+    personaIds: string[],
+    enteredAt: string | null,
+  ): Promise<void> {
+    const spans = await this.list(conversationId);
+    const now = nowIso();
+    const present = new Set(
+      spans.filter((s) => s.leftAt === null).map((s) => s.personaId),
+    );
+    for (const id of present) {
+      if (!personaIds.includes(id)) await this.leave(conversationId, id, now);
+    }
+    for (const id of personaIds) {
+      if (!present.has(id)) await this.enter(conversationId, id, enteredAt);
+    }
   },
 };
 

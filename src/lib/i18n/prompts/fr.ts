@@ -209,6 +209,13 @@ export const frPrompts: PromptPack = {
 
     conversationSummary: (summary) => `[RÉSUMÉ DE LA CONVERSATION]\n${summary}`,
 
+    partialPresence: () =>
+      `[CE QUE TU SAIS DE LA SCÈNE]\n` +
+      `Tu n'étais pas là pendant toute la conversation : l'historique ne montre ` +
+      `que ce qui s'est dit en ta présence. Tu ignores ce qui s'est passé avant ` +
+      `ton arrivée ou pendant ton absence. Ne fais pas comme si tu le savais ; ` +
+      `si cela compte, tu peux le demander ou le deviner à voix haute.`,
+
     immediateReaction: ({ moodLabel, intensityPercent, impulse }) => {
       const actingDirection =
         intensityPercent >= 65
