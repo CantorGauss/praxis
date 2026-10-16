@@ -9,7 +9,7 @@ Praxis plugs into any OpenAI-compatible endpoint — a model on your own machine
 or a hosted gateway like OpenRouter. Everything it stores lives in one SQLite
 file on your disk. No account, no telemetry, no cloud anything.
 
-![Three characters mid-scene, each answering in their own right](docs/screenshots/chat.png)
+![Three characters mid-scene, each answering in their own right](docs/screenshots/chat-stage.png)
 
 ## What actually happens
 
@@ -52,6 +52,14 @@ without waiting for your turn, even at the start of a scene. **Take the floor**
 or send a message to let the current line finish and join back in. This mode
 stays with the open conversation and overrides the usual automatic-turn limit.
 
+**When they go in circles, something happens.** Characters are told to move the
+scene forward — disagree, reveal, decide — rather than politely agree. If the
+last few lines still keep circling the same words, or everyone just nods along,
+the next speaker is nudged to shake things up. Left on their own, the model may
+also drop in a short stage direction of its own (marked ✦): news arriving, an
+incident, an unexpected gesture. At most once every eight lines, never right
+after you speak, and you can switch it off in Settings.
+
 **They're in a mood, and it lasts.** Before a character answers, Praxis works
 out how they'd actually feel about what just happened — startled, delighted,
 furious, quietly hurt — and that colours how they write. Drop something heavy on
@@ -75,7 +83,7 @@ pronouns others use for them, and a prompt in your own words. Pick a portrait
 from the built-in set, set how long their answers run, how loose their tone is.
 Four ready-made characters are there if you'd rather edit than start blank.
 
-![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters.png)
+![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
 **Long conversations don't get slow.** Past a certain point, older messages get
 condensed into a working memory instead of being dropped or dragged along

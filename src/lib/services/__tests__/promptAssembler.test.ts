@@ -304,6 +304,28 @@ describe("assemblePrompt", () => {
   });
 });
 
+describe("assemblePrompt : élan de la scène", () => {
+  it("pousse chaque réplique à faire avancer la scène, dans le préfixe stable", () => {
+    const result = assemblePrompt(baseInput());
+    expect(result.system).toContain("[ÉLAN]");
+    expect(result.system).toContain("Tu n'es pas obligé d'être d'accord");
+    expect(result.messages.at(-1)?.content).not.toContain("[LA SCÈNE PIÉTINE]");
+  });
+
+  it("clôt la requête sur une relance quand la scène piétine", () => {
+    const result = assemblePrompt(baseInput({ stagnation: "consensus" }));
+    const tail = result.messages.at(-1)?.content ?? "";
+    expect(tail).toContain("[LA SCÈNE PIÉTINE]");
+    expect(tail).toContain("Tout le monde approuve");
+    expect(result.system).not.toContain("[LA SCÈNE PIÉTINE]");
+  });
+
+  it("limite les didascalies des personnages", () => {
+    expect(assemblePrompt(baseInput()).system).toContain("Au plus une didascalie courte par réplique");
+    expect(assemblePrompt(baseInput({ pack: enPrompts })).system).toContain("At most one short stage direction per line");
+  });
+});
+
 describe("assemblePrompt selon la langue de jeu", () => {
   it("intitule les sections dans la langue du pack", () => {
     const result = assemblePrompt(baseInput({ pack: enPrompts }));

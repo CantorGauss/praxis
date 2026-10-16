@@ -15,6 +15,7 @@
     testConnection,
   } from "../services/llmClient";
   import { MAX_CONSECUTIVE_AI_TURNS } from "../services/scene";
+  import { TWIST_COOLDOWN_LINES } from "../services/twist";
   import { MODEL_CONTEXT_PRESETS } from "../services/inference";
   import type {
     ChatTextSize,
@@ -55,6 +56,13 @@
     "advanced",
     "data",
   ];
+  const SECTION_ICONS: Record<SettingsSection, string> = {
+    connections: "🔌",
+    conversation: "💬",
+    appearance: "🎨",
+    advanced: "🧪",
+    data: "📦",
+  };
   const THEME_OPTIONS: InterfaceTheme[] = ["system", "dark", "light"];
   const TEXT_SIZE_OPTIONS: ChatTextSize[] = ["small", "normal", "large"];
   const DENSITY_OPTIONS: InterfaceDensity[] = ["comfortable", "compact"];
@@ -360,14 +368,14 @@
 
 <div class="view">
   <h2 class="panel-title">{s.settings.title}</h2>
-  <p class="panel-sub">Tout reste sur votre machine.</p>
+  <p class="panel-sub">{s.settings.subtitle}</p>
 
   <nav class="settings-tabs" aria-label={s.settings.sectionsAria}>
     {#each SETTINGS_SECTIONS as id (id)}
       <button
         class:active={activeSection === id}
         onclick={() => (activeSection = id)}
-      >{s.settings.tabs[id]}</button>
+      ><span class="tab-icon" aria-hidden="true">{SECTION_ICONS[id]}</span>{s.settings.tabs[id]}</button>
     {/each}
   </nav>
 
@@ -701,6 +709,17 @@
         onchange={() => void persist()}
       />
       <span class="hint">{s.settings.idleResumeHint}</span>
+    </div>
+    <div class="field checkbox">
+      <label>
+        <input
+          type="checkbox"
+          bind:checked={app.settings.sceneTwists}
+          onchange={() => void persist()}
+        />
+        {s.settings.sceneTwists}
+      </label>
+      <span class="hint">{s.settings.sceneTwistsHint(TWIST_COOLDOWN_LINES)}</span>
     </div>
   </section>
   <section>
@@ -1204,24 +1223,24 @@
   }
 
   .theme-choice.dark .theme-swatch {
-    background: #100c12;
-    --swatch-sidebar: #19131c;
-    --swatch-bubble-a: #33263a;
-    --swatch-bubble-b: #d2a44d;
+    background: #130c1b;
+    --swatch-sidebar: #160e20;
+    --swatch-bubble-a: #2c1d3b;
+    --swatch-bubble-b: #ffbf47;
   }
 
   .theme-choice.light .theme-swatch {
-    background: #f8f3ec;
-    --swatch-sidebar: #e8ded2;
-    --swatch-bubble-a: #eee1d2;
-    --swatch-bubble-b: #9b6b18;
+    background: #fbf5ee;
+    --swatch-sidebar: #f6edf3;
+    --swatch-bubble-a: #fde9dc;
+    --swatch-bubble-b: #d9730d;
   }
 
   .theme-choice.system .theme-swatch {
-    background: linear-gradient(90deg, #100c12 50%, #f8f3ec 50%);
-    --swatch-sidebar: linear-gradient(90deg, #19131c 50%, #e8ded2 50%);
-    --swatch-bubble-a: linear-gradient(90deg, #33263a 50%, #eee1d2 50%);
-    --swatch-bubble-b: linear-gradient(90deg, #d2a44d 50%, #9b6b18 50%);
+    background: linear-gradient(90deg, #130c1b 50%, #fbf5ee 50%);
+    --swatch-sidebar: linear-gradient(90deg, #160e20 50%, #f6edf3 50%);
+    --swatch-bubble-a: linear-gradient(90deg, #2c1d3b 50%, #fde9dc 50%);
+    --swatch-bubble-b: linear-gradient(90deg, #ffbf47 50%, #d9730d 50%);
   }
 
   .appearance-group {
@@ -1267,17 +1286,35 @@
     padding: 4px;
     overflow-x: auto;
     border: 1px solid var(--border-soft);
-    border-radius: 11px;
+    border-radius: 999px;
     background: var(--bg-sidebar);
   }
 
   .settings-tabs button {
     flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     min-width: max-content;
-    padding: 7px 11px;
-    border-radius: 8px;
+    padding: 7px 13px;
+    border-radius: 999px;
     color: var(--text-faint);
     font-size: 12.5px;
+    font-weight: 600;
+    transition:
+      background 0.2s,
+      color 0.2s;
+  }
+
+  .tab-icon {
+    display: inline-block;
+    transition: transform 0.35s var(--spring);
+  }
+
+  .settings-tabs button:hover .tab-icon,
+  .settings-tabs button.active .tab-icon {
+    transform: scale(1.18) rotate(-8deg);
   }
 
   .settings-tabs button:hover {
@@ -1286,14 +1323,15 @@
   }
 
   .settings-tabs button.active {
-    color: var(--text);
-    background: var(--bg-active);
+    color: var(--accent-ink);
+    background: var(--accent-gradient);
+    box-shadow: 0 6px 16px -8px var(--accent-glow);
   }
 
   section {
     background: var(--bg-panel);
     border: 1px solid var(--border-soft);
-    border-radius: var(--radius);
+    border-radius: 18px;
     padding: 18px 20px;
     margin-bottom: 16px;
   }

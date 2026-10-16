@@ -397,6 +397,7 @@
         onclick={() => void submit()}
       >
         {sendLabel}
+        <span class="send-arrow" aria-hidden="true">➤</span>
       </button>
     </div>
     {#if composerMode === "scene"}
@@ -415,9 +416,9 @@
     flex-direction: column;
     gap: 7px;
     padding: 12px 20px 14px;
-    border-top: 1px solid rgba(185, 141, 61, 0.14);
+    border-top: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
     background: var(--chat-composer-background);
-    box-shadow: 0 -18px 46px -34px rgba(181, 126, 64, 0.38);
+    box-shadow: 0 -18px 46px -34px var(--accent-glow);
     align-items: stretch;
   }
 
@@ -451,8 +452,17 @@
     font-size: var(--composer-font-size);
     line-height: 1.5;
     background: var(--chat-input-bg);
-    border-color: rgba(151, 117, 132, 0.2);
-    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.22);
+    border-color: var(--border);
+    border-radius: 18px;
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.14);
+  }
+
+  .composer textarea:focus {
+    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+    box-shadow:
+      inset 0 2px 10px rgba(0, 0, 0, 0.1),
+      0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent),
+      0 8px 28px -12px var(--accent-glow);
   }
 
   .composer-input-wrap {
@@ -467,10 +477,14 @@
   }
 
   .tool-button {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 50%;
+    transition:
+      transform 0.35s var(--spring),
+      background 0.2s,
+      border-color 0.2s;
     color: var(--text-soft);
     font-size: 22px;
     line-height: 1;
@@ -484,6 +498,10 @@
     background: var(--bg-hover);
   }
 
+  .tool-button.on {
+    transform: rotate(45deg);
+  }
+
   .composer-tools-menu {
     position: absolute;
     left: 0;
@@ -492,9 +510,15 @@
     width: 250px;
     padding: 7px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 16px;
     background: var(--menu-bg);
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    transform-origin: bottom left;
+    animation: tools-pop 0.3s var(--spring) both;
+  }
+
+  @keyframes tools-pop {
+    from { opacity: 0; transform: translateY(6px) scale(0.94); }
   }
 
   .composer-tools-menu button {
@@ -520,13 +544,13 @@
   }
 
   .target-select {
-    height: 38px;
+    height: 40px;
     display: flex;
     align-items: center;
     gap: 3px;
-    padding-left: 9px;
+    padding-left: 12px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 999px;
     background: var(--bg-panel);
     color: var(--text-faint);
     font-size: 11px;
@@ -543,8 +567,22 @@
 
   .send-button,
   .stop-button {
-    min-height: 38px;
+    min-height: 40px;
     flex: 0 0 auto;
+  }
+
+  .send-button {
+    padding-inline: 18px 16px;
+  }
+
+  .send-arrow {
+    display: inline-block;
+    font-size: 11px;
+    transition: transform 0.3s var(--spring);
+  }
+
+  .send-button:hover:not(:disabled) .send-arrow {
+    transform: translateX(3px) rotate(-12deg);
   }
 
   .compact-status,
@@ -590,10 +628,10 @@
     bottom: calc(100% + 9px);
     width: min(390px, 100%);
     overflow: hidden;
-    border: 1px solid rgba(185, 141, 61, 0.2);
-    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    border-radius: 16px;
     background:
-      linear-gradient(160deg, rgba(77, 50, 66, 0.13), transparent 58%),
+      linear-gradient(160deg, rgba(255, 95, 143, 0.08), transparent 58%),
       var(--menu-bg);
     box-shadow:
       0 24px 54px rgba(0, 0, 0, 0.58),
@@ -655,7 +693,7 @@
   .mention-option > kbd {
     max-width: 130px;
     overflow: hidden;
-    color: #bca276;
+    color: var(--accent);
     font-size: 10.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -716,9 +754,9 @@
     align-items: center;
     gap: 9px;
     padding: 6px 11px;
-    border: 1px dashed rgba(185, 141, 61, 0.34);
-    border-radius: 10px;
-    background: rgba(60, 44, 30, 0.22);
+    border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
     font-size: 12px;
     color: var(--text-soft);
   }
@@ -749,7 +787,7 @@
   }
 
   .composer textarea.waiting {
-    border-color: rgba(185, 141, 61, 0.26);
+    border-color: color-mix(in srgb, var(--accent) 26%, transparent);
   }
 
   /* Un envoi différé reste un envoi : le bouton change de ton, pas d'état. */
@@ -760,7 +798,7 @@
   }
 
   .btn.primary.deferred:hover {
-    background: rgba(185, 141, 61, 0.14);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
     border-color: var(--accent);
     color: var(--accent);
   }

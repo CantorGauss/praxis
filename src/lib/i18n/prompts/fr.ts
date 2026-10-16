@@ -100,7 +100,7 @@ export const frPrompts: PromptPack = {
         `Ne préfixe jamais tes propres réponses de ton nom.`,
         `N'écris jamais à la place de ${enumerate([userName, ...otherNames])}, ` +
           `et n'invente pas leurs propos.`,
-        `Réponds seulement pour ce tour, brièvement.`,
+        `Réponds seulement pour ce tour : une réplique, pas un monologue.`,
       ].join("\n");
     },
 
@@ -114,16 +114,20 @@ export const frPrompts: PromptPack = {
       `Le dernier message de ${userName} s'adresse à toi et à ${others}.`,
 
     autonomousTurn: (userName) =>
-      `${userName} n'a rien ajouté depuis : tu réagis à ce que les autres ` +
-      `personnages viennent de dire, en t'adressant à l'un d'eux par son nom. ` +
-      `Reste bref. Si le sujet est épuisé, conclus au lieu de relancer, et ne ` +
-      `répète pas ce qui a déjà été dit.`,
+      `${userName} n'a rien ajouté depuis : la scène continue entre ` +
+      `personnages. Réagis à ce qui vient d'être dit en t'adressant à l'un ` +
+      `d'eux par son nom, et fais avancer l'échange : contredis, va plus loin, ` +
+      `plus loin, révèle quelque chose, prends une décision, ou change ` +
+      `franchement de sujet si celui-ci est épuisé. Ne répète pas ce qui a ` +
+      `déjà été dit.`,
 
     userSilentTurn: (userName) =>
       `${userName} choisit d'écouter sans intervenir. Poursuis la scène avec ` +
       `les autres personnages, en t'adressant à l'un d'eux par son nom. ` +
       `Réagis à leur dernière réplique ou à la situation de départ si personne ` +
-      `n'a encore parlé. Fais évoluer l'échange naturellement, sans répétition. ` +
+      `n'a encore parlé. Fais avancer l'échange : un désaccord, une ` +
+      `révélation, une question qui dérange, une décision ou un nouveau sujet ` +
+      `valent mieux qu'une approbation ou une redite. ` +
       `N'attends pas de réponse de ${userName} et ne sollicite pas son avis. ` +
       `N'invente ni ses paroles ni ses actions. Reste bref et ne joue que ton personnage.`,
 
@@ -171,9 +175,22 @@ export const frPrompts: PromptPack = {
       `gravité et ton caractère. Une personnalité posée contrôle éventuellement ` +
       `l'expression de ce qu'elle ressent, mais n'est ni apathique ni invulnérable. ` +
       `Quand quelque chose surprend, blesse, effraie, révolte ou bouleverse, laisse ` +
-      `la réaction affecter immédiatement tes gestes, ton rythme, tes mots et tes ` +
-      `décisions. Ne te réfugie pas systématiquement dans le détachement, l'ironie ` +
+      `la réaction affecter immédiatement tes mots, ton rythme, tes décisions et ` +
+      `au besoin un geste. Ne te réfugie pas systématiquement dans le détachement, l'ironie ` +
       `ou une réponse raisonnable. À l'inverse, ne surjoue pas les événements banals.`,
+
+    momentum: () =>
+      `[ÉLAN]\n` +
+      `Une bonne réplique fait avancer la scène. Apporte chaque fois au moins ` +
+      `une chose neuve : une information, un souvenir, un avis tranché, une ` +
+      `question qui dérange, une décision, ou un geste qui change la situation.\n` +
+      `Tu as tes propres envies, tes agacements et tes convictions : défends-les. ` +
+      `Tu n'es pas obligé d'être d'accord. Un désaccord sincère, une taquinerie ` +
+      `ou une contradiction franche valent mieux qu'une approbation polie.\n` +
+      `Ne reformule pas ce qui vient d'être dit et ne reprends pas les tournures ` +
+      `des autres. Évite les formules toutes faites et les conclusions ` +
+      `consensuelles qui referment l'échange. L'élan doit venir de ton ` +
+      `caractère, pas d'un rebondissement artificiel.`,
 
     startingSituation: (situation) =>
       `[SITUATION DE DÉPART]\n${situation}\n` +
@@ -197,9 +214,11 @@ export const frPrompts: PromptPack = {
         `« *entre dans la pièce et pose son sac* Bonsoir, je suis rentré. »\n` +
         `${userName} emploie cette convention pour décrire ` +
         `ce que ${subject} fait ; prends ces actions en compte comme des faits de la scène.\n` +
-        `Tu peux décrire tes propres gestes de la même manière, notamment lorsqu'ils ` +
-        `rendent une réaction émotionnelle perceptible, ` +
-        `et sans jamais décrire les actions de quelqu'un d'autre.\n` +
+        `Tu peux décrire tes propres gestes de la même manière, sans jamais ` +
+        `décrire les actions de quelqu'un d'autre. Sois économe : la parole prime. ` +
+        `Au plus une didascalie courte par réplique (une douzaine de mots), et ` +
+        `aucune quand une parole suffit. N'ouvre pas chaque réplique par une ` +
+        `description ; entre le plus souvent directement dans ce que tu dis.\n` +
         `Une ligne « (Scène : …) » décrit ce qui arrive dans le lieu — une ` +
         `arrivée, un départ, un événement. Ce n'est la parole de personne : ` +
         `tiens-en compte comme d'un fait, et ne réponds pas à cette ligne ` +
@@ -224,7 +243,7 @@ export const frPrompts: PromptPack = {
             `au calme et ne banalise pas ce qui vient de se produire.`
           : intensityPercent >= 30
             ? `Rends cette réaction nettement perceptible sans la caricaturer ; elle doit ` +
-              `infléchir le ton et au moins un geste, un mot ou une décision.`
+              `infléchir le ton et au moins un mot, une décision ou un geste.`
             : `La réaction est légère : laisse-la colorer le ton sans théâtraliser ` +
               `l'événement.`;
       return (
@@ -233,8 +252,9 @@ export const frPrompts: PromptPack = {
         `Intensité : ${intensityPercent} %\n` +
         (impulse ? `Première impulsion : ${impulse}\n` : "") +
         `Cette réaction existe avant ta première parole. Fais-la sentir dès le ` +
-        `début de la réponse, par le rythme, les mots, une hésitation, un geste ou ` +
-        `une décision cohérente avec ton caractère. ${actingDirection}`
+        `début de la réponse, avant tout par les mots, le rythme, une hésitation ` +
+        `ou une décision cohérente avec ton caractère ; un geste bref seulement ` +
+        `s'il dit quelque chose que les mots ne disent pas. ${actingDirection}`
       );
     },
 
@@ -260,6 +280,22 @@ export const frPrompts: PromptPack = {
 
     thisTurn: (addressing) => `[CE TOUR-CI]\n${addressing}`,
 
+    stagnation: (reason) => {
+      const diagnosis =
+        reason === "consensus"
+          ? "Tout le monde approuve et plus rien ne se passe."
+          : reason === "echo"
+            ? "Les dernières répliques se répètent presque mot pour mot."
+            : "L'échange tourne en rond autour des mêmes idées.";
+      return (
+        `[LA SCÈNE PIÉTINE]\n${diagnosis} ` +
+        `Ne reformule pas ce qui a été dit et n'approuve pas simplement. Fais ` +
+        `bouger les choses à ta manière, sans sortir de ton personnage : une ` +
+        `révélation, un désaccord net, une question inattendue, une décision, ` +
+        `un changement de sujet, ou un geste qui modifie la situation.`
+      );
+    },
+
     contextTooLong:
       "Le contexte est trop long pour ce modèle. Raccourcissez le prompt de " +
       "persona ou la situation de départ, choisissez des réponses plus courtes, " +
@@ -278,6 +314,8 @@ export const frPrompts: PromptPack = {
       "Un personnage qu'on ignore n'est pas obligé de répondre. " +
       "Choisis au maximum UN personnage : la parole sera réévaluée après sa réplique. " +
       "Privilégie la personne interrogée ou celle dont l'objection appelle une réponse. " +
+      "À défaut, préfère celui qui a une raison de contredire ou d'apporter un angle " +
+      "neuf plutôt que celui qui ne ferait qu'approuver. " +
       "Tiens compte des intentions et des propositions en cours, sans obliger chacun à parler. " +
       (afterUserMessage
         ? `${userName} vient de parler : au moins un personnage doit répondre.`
@@ -289,6 +327,34 @@ export const frPrompts: PromptPack = {
     transcriptLine: (name, content) => `${name} : ${content}`,
     narrationLine: (content) => `(Scène : ${content})`,
     emptyTranscript: "(la scène commence)",
+  },
+
+  twist: {
+    system: ({ userName }) =>
+      "Tu es l'auteur discret d'une scène improvisée entre personnages. " +
+      "La conversation s'enlise : écris UNE didascalie qui la relance. Ce peut " +
+      "être un événement extérieur, une nouvelle qui tombe, un objet qu'on " +
+      "découvre, un incident, ou une action inattendue de l'un des personnages " +
+      "présents — sans ses paroles ni ses pensées.\n" +
+      "Contraintes :\n" +
+      "- une ou deux phrases au présent, 30 mots au maximum ;\n" +
+      "- cohérente avec le lieu, l'époque et le ton établis : surprenante, mais " +
+      "plausible ;\n" +
+      "- aucune réplique, aucun dialogue, aucun sentiment imposé à quiconque ;\n" +
+      `- ne fais jamais agir ni parler ${userName} ;\n` +
+      "- n'introduis pas de nouveau personnage qui devrait prendre la parole ;\n" +
+      "- évite les clichés (téléphone qui sonne, coupure de courant, orage " +
+      "soudain) sauf si la scène les appelle vraiment ;\n" +
+      "- donne aux personnages quelque chose à quoi réagir, à décider ou à " +
+      "débattre.\n" +
+      "Réponds uniquement par la didascalie, sans préfixe, sans guillemets ni commentaire.",
+    user: ({ situation, summary, roster, transcript }) =>
+      (situation ? `Situation de départ :\n${situation}\n\n` : "") +
+      (summary ? `Ce qui s'est passé jusqu'ici :\n${summary}\n\n` : "") +
+      `Personnages présents :\n${roster}\n\n` +
+      `Dernières répliques :\n${transcript}\n\n` +
+      "Écris maintenant la didascalie.",
+    stripPrefixes: ["scène", "didascalie", "imprévu", "événement"],
   },
 
   coordination: {
@@ -320,7 +386,8 @@ export const frPrompts: PromptPack = {
       "tous ses participants ont exprimé leur soutien. Une position manquante est inconnue, " +
       "conditional n'est pas un accord ferme. Les propositions withdrawn ou superseded ne sont plus actives. " +
       "Ce registre fait foi pour les accords plutôt qu'un ancien résumé. Exprime seulement ta propre " +
-      "position et tes conditions, naturellement et sans réciter le registre. Ne décide pas pour autrui.",
+      "position et tes conditions, naturellement et sans réciter le registre. Ne décide pas pour autrui. " +
+      "Tu n'as pas à te rallier : un refus ou une contre-proposition sont légitimes si ton caractère les justifie.",
   },
 
   summary: {
@@ -435,8 +502,8 @@ export const frPrompts: PromptPack = {
   inference: {
     shortResponse:
       "Réponds brièvement mais de façon substantielle : vise généralement 3 à 6 " +
-      "phrases complètes et naturelles. Développe assez la réaction, le geste ou " +
-      "l'idée pour que la réplique sonne humaine. « Bref » ne signifie ni une " +
+      "phrases complètes et naturelles, surtout parlées. Développe assez la " +
+      "réaction ou l'idée pour que la réplique sonne humaine. « Bref » ne signifie ni une " +
       "réponse d'un mot, ni une formule télégraphique ; une seule phrase convient " +
       "uniquement quand la situation l'appelle vraiment.",
   },

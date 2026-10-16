@@ -104,7 +104,7 @@ export const enPrompts: PromptPack = {
         `Never prefix your own replies with your name.`,
         `Never write in place of ${enumerate([userName, ...otherNames])}, ` +
           `and do not invent what they said.`,
-        `Answer for this turn only, and keep it short.`,
+        `Answer for this turn only: one line, not a monologue.`,
       ].join("\n");
     },
 
@@ -118,16 +118,19 @@ export const enPrompts: PromptPack = {
       `${userName}'s last message is addressed to you and to ${others}.`,
 
     autonomousTurn: (userName) =>
-      `${userName} has added nothing since: you are reacting to what the other ` +
-      `characters have just said, addressing one of them by name. ` +
-      `Keep it short. If the topic is exhausted, wrap up instead of reopening ` +
-      `it, and do not repeat what has already been said.`,
+      `${userName} has added nothing since: the scene carries on between the ` +
+      `characters. React to what was just said, addressing one of them by ` +
+      `name, and move the exchange forward: push back, take the idea further, ` +
+      `reveal something, make a decision, or change the subject outright if ` +
+      `this one is exhausted. Do not repeat what has already been said.`,
 
     userSilentTurn: (userName) =>
       `${userName} chooses to listen without joining in. Continue the scene ` +
       `with the other characters, addressing one of them by name. React to ` +
       `their latest line, or to the opening situation if nobody has spoken yet. ` +
-      `Let the exchange develop naturally without repetition. Do not wait for ` +
+      `Move the exchange forward: a disagreement, a revelation, an awkward ` +
+      `question, a decision or a new topic is worth more than agreement or a ` +
+      `rehash. Do not wait for ` +
       `${userName} to answer or ask for their opinion. Do not invent their ` +
       `words or actions. Keep it short and play only your own character.`,
 
@@ -176,9 +179,22 @@ export const enPrompts: PromptPack = {
       `personality may control how it shows what it feels, but it is neither ` +
       `apathetic nor invulnerable. When something surprises, wounds, frightens, ` +
       `outrages or overwhelms you, let the reaction immediately affect your ` +
-      `gestures, your rhythm, your words and your decisions. Do not retreat by ` +
+      `words, your rhythm, your decisions and, where needed, a gesture. Do not retreat by ` +
       `default into detachment, irony or a reasonable answer. Conversely, do ` +
       `not overplay ordinary events.`,
+
+    momentum: () =>
+      `[MOMENTUM]\n` +
+      `A good line moves the scene forward. Each time, bring at least one new ` +
+      `thing: a piece of information, a memory, a strong opinion, an awkward ` +
+      `question, a decision, or a gesture that changes the situation.\n` +
+      `You have your own wants, irritations and convictions: stand up for them. ` +
+      `You do not have to agree. Honest disagreement, teasing or flat ` +
+      `contradiction beat polite approval.\n` +
+      `Do not rephrase what was just said or borrow other people's wording. ` +
+      `Avoid stock phrases and consensual wrap-ups that close the exchange ` +
+      `down. The momentum should come from your character, not from an ` +
+      `artificial twist.`,
 
     startingSituation: (situation) =>
       `[STARTING SITUATION]\n${situation}\n` +
@@ -203,9 +219,11 @@ export const enPrompts: PromptPack = {
         `"*walks in and drops his bag* Evening, I'm home."\n` +
         `${userName} uses this convention to describe what ${subject} ${verb} ` +
         `doing; treat those actions as facts of the scene.\n` +
-        `You may describe your own gestures the same way, especially when they ` +
-        `make an emotional reaction perceptible, and never describing anyone ` +
-        `else's actions.\n` +
+        `You may describe your own gestures the same way, never describing ` +
+        `anyone else's actions. Be sparing: speech comes first. At most one ` +
+        `short stage direction per line (a dozen words or so), and none when ` +
+        `words are enough. Do not open every line with a description; most of ` +
+        `the time, go straight into what you say.\n` +
         `A "(Scene: …)" line describes what happens in the room — an arrival, ` +
         `a departure, an event. It is nobody's speech: treat it as a fact, and ` +
         `do not answer that line as if someone had said it to you.`
@@ -229,7 +247,7 @@ export const enPrompts: PromptPack = {
             `immediately, and do not play down what has just happened.`
           : intensityPercent >= 30
             ? `Make this reaction clearly perceptible without caricaturing it; ` +
-              `it must bend the tone and at least one gesture, word or decision.`
+              `it must bend the tone and at least one word, decision or gesture.`
             : `The reaction is mild: let it colour the tone without dramatising ` +
               `the event.`;
       return (
@@ -238,8 +256,9 @@ export const enPrompts: PromptPack = {
         `Intensity: ${intensityPercent}%\n` +
         (impulse ? `First impulse: ${impulse}\n` : "") +
         `This reaction exists before your first word. Make it felt from the ` +
-        `start of the response, through rhythm, word choice, a hesitation, a ` +
-        `gesture or a decision consistent with your character. ${actingDirection}`
+        `start of the response, above all through word choice, rhythm, a ` +
+        `hesitation or a decision consistent with your character; a brief ` +
+        `gesture only if it says something the words do not. ${actingDirection}`
       );
     },
 
@@ -265,6 +284,22 @@ export const enPrompts: PromptPack = {
 
     thisTurn: (addressing) => `[THIS TURN]\n${addressing}`,
 
+    stagnation: (reason) => {
+      const diagnosis =
+        reason === "consensus"
+          ? "Everyone agrees and nothing is happening any more."
+          : reason === "echo"
+            ? "The last lines repeat each other almost word for word."
+            : "The exchange keeps circling the same ideas.";
+      return (
+        `[THE SCENE IS STALLING]\n${diagnosis} ` +
+        `Do not rephrase what has been said and do not simply agree. Shake ` +
+        `things up in your own way, without breaking character: a revelation, ` +
+        `a clear disagreement, an unexpected question, a decision, a change of ` +
+        `subject, or a gesture that alters the situation.`
+      );
+    },
+
     contextTooLong:
       "The context is too long for this model. Shorten the persona prompt or " +
       "the starting situation, choose shorter responses, or raise the model's " +
@@ -281,6 +316,8 @@ export const enPrompts: PromptPack = {
       "reason to react, who would naturally stay silent. A character being " +
       "ignored is not obliged to answer. Choose at most ONE character: reassess after every utterance. " +
       "Prioritize whoever was asked a question or can answer the current objection. " +
+      "Otherwise, prefer someone with a reason to push back or bring a fresh angle " +
+      "over someone who would only agree. " +
       "Consider explicit intentions and pending proposals without making everyone speak. " +
       (afterUserMessage
         ? `${userName} has just spoken: at least one character must answer.`
@@ -292,6 +329,33 @@ export const enPrompts: PromptPack = {
     transcriptLine: (name, content) => `${name}: ${content}`,
     narrationLine: (content) => `(Scene: ${content})`,
     emptyTranscript: "(the scene is starting)",
+  },
+
+  twist: {
+    system: ({ userName }) =>
+      "You are the unseen author of an improvised scene between characters. " +
+      "The conversation is bogging down: write ONE stage direction that gets " +
+      "it going again. It can be an outside event, a piece of news arriving, " +
+      "an object being discovered, an incident, or an unexpected action by " +
+      "one of the characters present — without their words or thoughts.\n" +
+      "Constraints:\n" +
+      "- one or two sentences in the present tense, 30 words at most;\n" +
+      "- consistent with the established place, period and tone: surprising, " +
+      "but plausible;\n" +
+      "- no lines, no dialogue, no feelings imposed on anyone;\n" +
+      `- never make ${userName} act or speak;\n` +
+      "- do not introduce a new character who would need to speak;\n" +
+      "- avoid clichés (a phone ringing, a power cut, a sudden storm) unless " +
+      "the scene truly calls for them;\n" +
+      "- give the characters something to react to, decide or argue about.\n" +
+      "Reply with the stage direction only, no prefix, quotes or commentary.",
+    user: ({ situation, summary, roster, transcript }) =>
+      (situation ? `Starting situation:\n${situation}\n\n` : "") +
+      (summary ? `What has happened so far:\n${summary}\n\n` : "") +
+      `Characters present:\n${roster}\n\n` +
+      `Latest lines:\n${transcript}\n\n` +
+      "Write the stage direction now.",
+    stripPrefixes: ["scene", "stage direction", "twist", "event"],
   },
 
   coordination: {
@@ -320,7 +384,8 @@ export const enPrompts: PromptPack = {
       "agreed means every listed participant expressed support. A missing position is unknown, " +
       "conditional is not firm agreement. Withdrawn or superseded proposals are no longer active. " +
       "This ledger takes precedence over older summaries for agreements. Express only your own " +
-      "position and conditions naturally, without reciting this ledger or deciding for others.",
+      "position and conditions naturally, without reciting this ledger or deciding for others. " +
+      "You do not have to come round: a refusal or a counter-proposal is legitimate if your character warrants it.",
   },
 
   summary: {
@@ -433,8 +498,8 @@ export const enPrompts: PromptPack = {
   inference: {
     shortResponse:
       "Answer briefly but substantially: aim for 3 to 6 complete, natural " +
-      "sentences. Develop the reaction, the gesture or the idea enough for the " +
-      "line to sound human. \"Brief\" means neither a one-word answer nor a " +
+      "sentences, mostly spoken. Develop the reaction or the idea enough for " +
+      "the line to sound human. \"Brief\" means neither a one-word answer nor a " +
       "telegraphic formula; a single sentence is right only when the situation " +
       "genuinely calls for it.",
   },

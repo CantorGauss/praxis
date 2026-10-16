@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::ipc::Channel;
@@ -14,6 +14,7 @@ const KEYRING_USER: &str = "api-key";
 const LEGACY_APP_DIR: &str = "com.jeffvidal.anna";
 const LEGACY_DB_PREFIX: &str = "anna.db";
 const DB_PREFIX: &str = "praxis.db";
+const DB_URL: &str = "sqlite:praxis.db";
 
 // ---------------------------------------------------------------------------
 // Reprise des données de la version « Anna »
@@ -109,8 +110,7 @@ fn endpoint(base: &url::Url, path: &str) -> String {
 }
 
 fn build_client(timeout_ms: Option<u64>) -> Result<reqwest::Client, String> {
-    let mut builder =
-        reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
+    let mut builder = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
     if let Some(ms) = timeout_ms {
         builder = builder.timeout(std::time::Duration::from_millis(ms));
     }
@@ -154,10 +154,7 @@ async fn test_connection(
     if resp.status().is_success() {
         Ok(true)
     } else {
-        Err(format!(
-            "The server replied with status {}",
-            resp.status()
-        ))
+        Err(format!("The server replied with status {}", resp.status()))
     }
 }
 
@@ -175,10 +172,7 @@ async fn list_models(
         .await
         .map_err(|e| humanize_reqwest_error(&e))?;
     if !resp.status().is_success() {
-        return Err(format!(
-            "The server replied with status {}",
-            resp.status()
-        ));
+        return Err(format!("The server replied with status {}", resp.status()));
     }
     resp.json::<serde_json::Value>()
         .await
@@ -225,6 +219,46 @@ enum StreamEvent {
     Done,
     Cancelled,
     Error { message: String },
+}
+
+/// Ce qu'une ligne SSE complète apporte à la réponse.
+#[derive(Debug, PartialEq)]
+enum SseLine {
+    Delta(String),
+    Done,
+}
+
+/// Découpe le flux SSE en lignes sur les octets bruts. Un caractère UTF-8
+/// (accent, emoji) peut être coupé entre deux paquets réseau : décoder chaque
+/// paquet isolément le remplacerait par « � ». On ne décode donc qu'une ligne
+/// complète.
+#[derive(Default)]
+struct SseDecoder {
+    buffer: Vec<u8>,
+}
+
+impl SseDecoder {
+    fn feed(&mut self, chunk: &[u8]) -> Vec<SseLine> {
+        self.buffer.extend_from_slice(chunk);
+        let mut lines = Vec::new();
+        while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
+            let raw: Vec<u8> = self.buffer.drain(..=pos).collect();
+            if let Some(line) = parse_sse_line(&String::from_utf8_lossy(&raw)) {
+                lines.push(line);
+            }
+        }
+        lines
+    }
+}
+
+fn parse_sse_line(line: &str) -> Option<SseLine> {
+    let data = line.trim().strip_prefix("data:")?.trim();
+    if data == "[DONE]" {
+        return Some(SseLine::Done);
+    }
+    let json = serde_json::from_str::<serde_json::Value>(data).ok()?;
+    let content = json.pointer("/choices/0/delta/content")?.as_str()?;
+    (!content.is_empty()).then(|| SseLine::Delta(content.to_string()))
 }
 
 /// Requête de chat streamée (SSE). Les deltas sont poussés sur le canal.
@@ -282,7 +316,7 @@ async fn stream_chat(
         }
 
         let mut stream = resp.bytes_stream();
-        let mut buffer = String::new();
+        let mut decoder = SseDecoder::default();
         while let Some(chunk) = stream.next().await {
             let chunk = match chunk {
                 Ok(c) => c,
@@ -293,27 +327,14 @@ async fn stream_chat(
                     return;
                 }
             };
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-            while let Some(pos) = buffer.find('\n') {
-                let line = buffer[..pos].trim().to_string();
-                buffer.drain(..=pos);
-                if let Some(data) = line.strip_prefix("data:") {
-                    let data = data.trim();
-                    if data == "[DONE]" {
+            for line in decoder.feed(&chunk) {
+                match line {
+                    SseLine::Delta(content) => {
+                        let _ = channel.send(StreamEvent::Delta { content });
+                    }
+                    SseLine::Done => {
                         let _ = channel.send(StreamEvent::Done);
                         return;
-                    }
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        if let Some(content) = json
-                            .pointer("/choices/0/delta/content")
-                            .and_then(|v| v.as_str())
-                        {
-                            if !content.is_empty() {
-                                let _ = channel.send(StreamEvent::Delta {
-                                    content: content.to_string(),
-                                });
-                            }
-                        }
                     }
                 }
             }
@@ -381,8 +402,8 @@ fn get_api_key(connection_id: Option<String>) -> Result<Option<String>, String> 
     }
     // Repli sur l'entrée créée sous l'ancien nom, recopiée sous le nouveau.
     // L'ancienne est laissée en place : c'est le trousseau de l'utilisateur.
-    let legacy = keyring::Entry::new(KEYRING_SERVICE_LEGACY, KEYRING_USER)
-        .map_err(|e| e.to_string())?;
+    let legacy =
+        keyring::Entry::new(KEYRING_SERVICE_LEGACY, KEYRING_USER).map_err(|e| e.to_string())?;
     match legacy.get_password() {
         Ok(p) => {
             let _ = entry.set_password(&p);
@@ -491,16 +512,124 @@ fn log_client_error(app: tauri::AppHandle, message: String) {
 }
 
 // ---------------------------------------------------------------------------
+// Import d'une sauvegarde complète
+//
+// Le remplacement se fait ici, sur une seule connexion et dans une seule
+// transaction : le plugin SQL répartit les requêtes de l'interface sur un pool
+// de connexions, où un BEGIN … COMMIT envoyé depuis le JavaScript ne tient
+// pas. Si la moindre ligne est refusée, la base reste exactement telle
+// qu'elle était.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct BackupTable {
+    name: String,
+    rows: Vec<serde_json::Map<String, serde_json::Value>>,
+}
+
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// Vide les tables (dans l'ordre inverse) puis les remplit (dans l'ordre
+/// donné, celui des dépendances). Les noms de tables et de colonnes viennent
+/// du fichier importé : ils sont vérifiés contre le schéma réel avant d'entrer
+/// dans une requête.
+async fn replace_all_rows(
+    conn: &mut sqlx::SqliteConnection,
+    tables: &[BackupTable],
+    follow_up: &[String],
+) -> Result<(), String> {
+    for table in tables {
+        let columns: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info(?1)")
+            .bind(&table.name)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())?;
+        if columns.is_empty() {
+            return Err(format!("Unknown table in backup: {}", table.name));
+        }
+        for row in &table.rows {
+            if let Some(unknown) = row.keys().find(|k| !columns.contains(k)) {
+                return Err(format!(
+                    "Unknown column in backup: {}.{unknown}",
+                    table.name
+                ));
+            }
+        }
+    }
+
+    for table in tables.iter().rev() {
+        sqlx::query(&format!("DELETE FROM {}", quote_ident(&table.name)))
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    for table in tables {
+        for row in table.rows.iter().filter(|r| !r.is_empty()) {
+            let columns: Vec<String> = row.keys().map(|k| quote_ident(k)).collect();
+            let placeholders: Vec<String> = (1..=row.len()).map(|i| format!("?{i}")).collect();
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                quote_ident(&table.name),
+                columns.join(","),
+                placeholders.join(",")
+            );
+            // Mêmes conversions que le plugin SQL, pour que les valeurs
+            // relues soient identiques à celles écrites par l'interface.
+            let mut query = sqlx::query(&sql);
+            for value in row.values() {
+                query = match value {
+                    serde_json::Value::Null => query.bind(None::<String>),
+                    serde_json::Value::String(text) => query.bind(text.clone()),
+                    serde_json::Value::Number(n) => query.bind(n.as_f64().unwrap_or_default()),
+                    other => query.bind(other.clone()),
+                };
+            }
+            query
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| format!("{}: {e}", table.name))?;
+        }
+    }
+
+    for sql in follow_up {
+        sqlx::query(sql)
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn import_backup(
+    instances: State<'_, tauri_plugin_sql::DbInstances>,
+    tables: Vec<BackupTable>,
+    follow_up: Vec<String>,
+) -> Result<(), String> {
+    let instances = instances.0.read().await;
+    let pool = match instances.get(DB_URL) {
+        Some(tauri_plugin_sql::DbPool::Sqlite(pool)) => pool,
+        None => return Err("The database is not open.".into()),
+    };
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    replace_all_rows(&mut tx, &tables, &follow_up).await?;
+    tx.commit().await.map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Migrations SQLite
 // ---------------------------------------------------------------------------
 
 fn migrations() -> Vec<Migration> {
     vec![
         Migration {
-        version: 1,
-        description: "schema_initial",
-        kind: MigrationKind::Up,
-        sql: r#"
+            version: 1,
+            description: "schema_initial",
+            kind: MigrationKind::Up,
+            sql: r#"
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -736,6 +865,14 @@ fn migrations() -> Vec<Migration> {
         },
         Migration {
             version: 11,
+            description: "message_reactions",
+            kind: MigrationKind::Up,
+            // Humeur du personnage au moment de sa réplique : l'interface en
+            // tire le ton de la bulle, y compris dans l'historique.
+            sql: "ALTER TABLE messages ADD COLUMN reaction TEXT;",
+        },
+        Migration {
+            version: 12,
             description: "conversation_presence",
             kind: MigrationKind::Up,
             // Périodes de présence d'un personnage dans la scène : il ne connaît
@@ -782,7 +919,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:praxis.db", migrations())
+                .add_migrations(DB_URL, migrations())
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
@@ -795,8 +932,183 @@ pub fn run() {
             get_api_key,
             import_avatar,
             remove_avatar,
+            import_backup,
             log_client_error
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn delta(content: &str) -> String {
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({ "choices": [{ "delta": { "content": content } }] })
+        )
+    }
+
+    #[test]
+    fn sse_keeps_characters_split_across_chunks() {
+        let bytes = delta("Où êtes-vous ? 🎭").into_bytes();
+        // Couper au milieu de chaque caractère multi-octets.
+        let mut decoder = SseDecoder::default();
+        let mut lines = Vec::new();
+        for byte in &bytes {
+            lines.extend(decoder.feed(std::slice::from_ref(byte)));
+        }
+        assert_eq!(lines, vec![SseLine::Delta("Où êtes-vous ? 🎭".into())]);
+    }
+
+    #[test]
+    fn sse_waits_for_a_complete_line() {
+        let mut decoder = SseDecoder::default();
+        let full = delta("Bonjour");
+        let (head, tail) = full.split_at(12);
+        assert!(decoder.feed(head.as_bytes()).is_empty());
+        assert_eq!(
+            decoder.feed(tail.as_bytes()),
+            vec![SseLine::Delta("Bonjour".into())]
+        );
+    }
+
+    #[test]
+    fn sse_reads_several_lines_and_done() {
+        let mut decoder = SseDecoder::default();
+        let chunk = format!(
+            "{}: keep-alive\r\n{}data: [DONE]\n",
+            delta("A"),
+            delta("B").replace('\n', "\r\n")
+        );
+        assert_eq!(
+            decoder.feed(chunk.as_bytes()),
+            vec![
+                SseLine::Delta("A".into()),
+                SseLine::Delta("B".into()),
+                SseLine::Done
+            ]
+        );
+    }
+
+    async fn memory_db() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            "CREATE TABLE personas (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+             CREATE TABLE messages (
+                 id TEXT PRIMARY KEY,
+                 persona_id TEXT REFERENCES personas(id) ON DELETE CASCADE,
+                 persona_name TEXT
+             );
+             INSERT INTO personas VALUES ('p0', 'Ancienne');
+             INSERT INTO messages VALUES ('m0', 'p0', 'Ancienne');",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    fn backup(json: serde_json::Value) -> Vec<BackupTable> {
+        json.as_array()
+            .unwrap()
+            .iter()
+            .map(|t| BackupTable {
+                name: t["name"].as_str().unwrap().into(),
+                rows: serde_json::from_value(t["rows"].clone()).unwrap(),
+            })
+            .collect()
+    }
+
+    /// Reproduit `import_backup` : transaction validée seulement en cas de succès.
+    async fn import(
+        pool: &sqlx::SqlitePool,
+        tables: Vec<BackupTable>,
+        follow_up: &[&str],
+    ) -> Result<(), String> {
+        let follow_up: Vec<String> = follow_up.iter().map(|s| s.to_string()).collect();
+        let mut tx = pool.begin().await.unwrap();
+        replace_all_rows(&mut tx, &tables, &follow_up).await?;
+        tx.commit().await.map_err(|e| e.to_string())
+    }
+
+    async fn persona_names(pool: &sqlx::SqlitePool) -> Vec<String> {
+        sqlx::query_scalar("SELECT name FROM personas ORDER BY id")
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn import_replaces_everything_and_runs_follow_up() {
+        let pool = memory_db().await;
+        let tables = backup(serde_json::json!([
+            { "name": "personas", "rows": [{ "id": "p1", "name": "Anna" }] },
+            { "name": "messages", "rows": [{ "id": "m1", "persona_id": "p1" }] }
+        ]));
+        let fill_names = "UPDATE messages SET persona_name = \
+            (SELECT name FROM personas WHERE id = messages.persona_id)";
+        import(&pool, tables, &[fill_names]).await.unwrap();
+
+        assert_eq!(persona_names(&pool).await, vec!["Anna"]);
+        let names: Vec<String> = sqlx::query_scalar("SELECT persona_name FROM messages")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(names, vec!["Anna"]);
+    }
+
+    #[tokio::test]
+    async fn import_rejects_unknown_columns_without_touching_data() {
+        let pool = memory_db().await;
+        let tables = backup(serde_json::json!([
+            { "name": "personas", "rows": [
+                { "id": "p1", "name": "Anna", "name) VALUES ('x'); DROP TABLE messages; --": 1 }
+            ] }
+        ]));
+        let err = import(&pool, tables, &[]).await.unwrap_err();
+        assert!(err.starts_with("Unknown column in backup: personas."));
+        assert_eq!(persona_names(&pool).await, vec!["Ancienne"]);
+    }
+
+    #[tokio::test]
+    async fn import_rejects_unknown_tables() {
+        let pool = memory_db().await;
+        let tables = backup(serde_json::json!([
+            { "name": "personas; DROP TABLE messages", "rows": [] }
+        ]));
+        assert!(import(&pool, tables, &[]).await.is_err());
+        assert_eq!(persona_names(&pool).await, vec!["Ancienne"]);
+    }
+
+    #[tokio::test]
+    async fn import_failing_midway_keeps_previous_data() {
+        let pool = memory_db().await;
+        // Les personnages passent, puis une ligne viole une contrainte NOT NULL.
+        let tables = backup(serde_json::json!([
+            { "name": "personas", "rows": [
+                { "id": "p1", "name": "Anna" },
+                { "id": "p2", "name": null }
+            ] }
+        ]));
+        assert!(import(&pool, tables, &[]).await.is_err());
+        assert_eq!(persona_names(&pool).await, vec!["Ancienne"]);
+        let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(messages, 1);
+    }
+
+    #[test]
+    fn sse_ignores_empty_and_unreadable_payloads() {
+        let mut decoder = SseDecoder::default();
+        let chunk = format!("{}data: {{not json\nevent: ping\n", delta(""));
+        assert!(decoder.feed(chunk.as_bytes()).is_empty());
+    }
 }

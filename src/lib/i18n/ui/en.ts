@@ -39,6 +39,7 @@ export const enUi = {
   },
 
   sidebar: {
+    tagline: "A pocket theatre",
     conversations: "Conversations",
     newConversation: "New conversation",
     deleteConversation: "Delete conversation",
@@ -52,14 +53,15 @@ export const enUi = {
   },
 
   curtain: {
-    title: "No conversation open",
+    title: "The curtain is down",
     withCast:
-      "Open an existing conversation, or pick the characters for a new one.",
+      "Your troupe is waiting in the wings. Pick up a scene on the left, or start a brand-new one.",
     withoutCast:
-      "Create a first character — a name, a description and a temperament — before you begin.",
+      "The stage is empty. Invent a first character — a name, a quirk, a temperament — and the show can begin.",
     createCharacter: "Create a character",
+    raiseCurtain: "Raise the curtain",
     available: (count: number) =>
-      `${count} conversation${count > 1 ? "s" : ""} available in the left column.`,
+      `${count} scene${count > 1 ? "s" : ""} waiting in the left column.`,
   },
 
   avatar: {
@@ -335,18 +337,31 @@ export const enUi = {
   newChat: {
     subtitle: "Pick the characters. You can change the scene at any time.",
     whoToTalkTo: "Who do you want to talk to?",
+    castingHint: "Click to cast — the order you pick is the order they speak.",
     noCharacters: "No characters yet.",
     createOneFirst: "Create one first.",
     situation: "Situation",
     optional: "optional",
     situationPlaceholder:
       "Where are you, at what time, what has just happened?",
-    useExample: "Use an example",
-    example:
+    examples: [
       "An autumn evening, in the living room of an old flat. Rain beats " +
-      "against the windows. Tea is going cold on the table and a book lies " +
-      "open on the sofa, plainly abandoned mid-chapter. Nobody has yet " +
-      "brought up the difficult subject.",
+        "against the windows. Tea is going cold on the table and a book lies " +
+        "open on the sofa, plainly abandoned mid-chapter. Nobody has yet " +
+        "brought up the difficult subject.",
+      "A night train has stopped between two stations. The lights flicker. " +
+        "Nobody has come through the door at the end of the carriage for " +
+        "twenty minutes.",
+      "A cooking contest, live on air. Ten minutes left on the clock, the " +
+        "oven has just died, and the jury is already walking over.",
+      "A lift stuck between the 14th and 15th floors of an office tower, at " +
+        "11 p.m. Someone has just admitted they are claustrophobic.",
+      "The last evening of a summer holiday, on a beach. The bonfire is " +
+        "dying down and someone has found an unopened letter in the sand.",
+      "A spaceship's mess hall, six months into the voyage. The coffee " +
+        "machine has finally broken and morale is at an all-time low.",
+    ],
+    surpriseMe: "Surprise me",
     hideOptions: "Hide",
     showOptions: "Show",
     advancedOptions: "advanced options",
@@ -355,7 +370,7 @@ export const enUi = {
     speakingOrder: "Speaking order",
     pickAtLeastOne: "Choose at least one character.",
     creating: "Creating…",
-    start: "Start",
+    start: "Curtain up!",
   },
 
   fatal: {
@@ -366,6 +381,7 @@ export const enUi = {
   },
 
   settings: {
+    subtitle: "Everything stays on your machine — backstage, under lock and key.",
     title: "Settings",
     sectionsAria: "Settings sections",
     tabs: {
@@ -493,6 +509,12 @@ export const enUi = {
       "If you say nothing for this long, the characters take the floor among " +
       "themselves. 0 for them to always wait for your message. Typing in the " +
       "input pushes the deadline back.",
+    sceneTwists: "Twists when the scene goes in circles",
+    sceneTwistsHint: (lines: number) =>
+      "When the characters repeat themselves without you, the model writes a " +
+      "stage direction that shakes things up: news arriving, an incident, an " +
+      "unexpected gesture. It costs one short extra request, at most once " +
+      `every ${lines} lines.`,
     characterBehaviour: "Character behaviour",
     defaultPersona: "Character offered when starting a conversation",
     noneOption: "— None —",
@@ -575,6 +597,7 @@ export const enUi = {
   /** Bandeaux et messages émis par l'état applicatif. */
   app: {
     narrationSpeaker: "Scene",
+    generatedTwist: "Twist written by the model to get the scene moving",
     personaWillEnter: (name: string) =>
       `${name} will enter at the end of the current turn.`,
     personaWillLeave: (name: string) =>

@@ -188,7 +188,7 @@ describe("coordination de la scène", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     const prompts = vi.mocked(llm.streamChat).mock.calls.map((call) => ({
-      speaker: call[2].messages[0].content as string,
+      speaker: (call[2].messages as { content: string }[])[0].content,
       text: JSON.stringify(call[2].messages),
     }));
     const marc = prompts.find((p) => p.speaker.includes("Tu es Marc."))!;
