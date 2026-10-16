@@ -594,10 +594,10 @@
     border-color: var(--tone-edge, rgba(225, 79, 79, 0.45));
   }
 
+  /* Ni italique ni gris : ce sont les marques des didascalies, et les
+     paroles chuchotées doivent rester des paroles. */
   .bubble.say-whisper {
-    font-size: calc(var(--chat-font-size) * 0.94);
-    font-style: italic;
-    color: var(--text-soft);
+    font-size: calc(var(--chat-font-size) * 0.95);
     border-style: dashed;
   }
 

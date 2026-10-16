@@ -78,8 +78,9 @@ const cue = (roots: string) => new RegExp(`(^|[^\\p{L}])(${roots})`, "iu");
 
 const ACTION_CUES: [BubbleDelivery, RegExp][] = [
   ["shout", cue("cri(e|ent|ant)|hurl|s['’]écri|vocif|beugl|tonn(e|ant)|rugi|shout|yell|scream|roar|bellow")],
-  ["whisper", cue("chuchot|murmur|souffl|à voix basse|tout bas|whisper|under (his|her|their) breath|softly|quietly")],
-  ["laugh", cue("rit|rient|rire|riant|rican|pouff|glouss|s['’]esclaff|laugh|giggl|chuckl|snicker|cackl")],
+  // Pas de « souffl » seul : « le souffle court » n'est pas un chuchotement.
+  ["whisper", cue("chuchot|murmur|à voix basse|à mi-voix|tout bas|à l['’]oreille|whisper|under (his|her|their) breath")],
+  ["laugh", cue("rit(?!\\p{L})|rient(?!\\p{L})|rire|riant|rican|pouff|glouss|s['’]esclaff|laugh|giggl|chuckl|snicker|cackl")],
   ["tremble", cue("trembl|frissonn|tressaill|grelott|shiver|quiver|shaking")],
 ];
 
@@ -87,7 +88,13 @@ const LAUGH_TEXT = /(^|[^\p{L}])((ha|hé|hi|ah){2,}|mdr|lol|xd)($|[^\p{L}])/iu;
 
 function deliveryOf(content: string): BubbleDelivery | null {
   const segments = splitActions(content);
+  // Seule la didascalie d'ouverture dit comment la réplique est lancée. Un
+  // geste glissé au milieu d'une longue tirade ne la change pas tout entière.
+  const firstSpeech = segments.findIndex(
+    (segment) => segment.kind === "speech" && segment.text.trim().length > 0,
+  );
   const actions = segments
+    .slice(0, firstSpeech === -1 ? segments.length : firstSpeech)
     .filter((segment) => segment.kind === "action")
     .map((segment) => segment.text)
     .join(" ");
