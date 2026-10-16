@@ -449,6 +449,25 @@ describe("assemblePrompt en scène de groupe", () => {
     expect(withoutSystem.at(-1)?.content).toContain("Marc : Bonsoir");
   });
 
+  it("garde la scène quand le seul autre personnage est sorti", () => {
+    const result = assemblePrompt(
+      baseInput({
+        scene: { ...scene, otherNames: [], others: [], departedNames: ["Marc"] },
+        recentMessages: [
+          message("1", "user", "Bonjour"),
+          message("2", "assistant", "Salut", "p1"),
+          message("3", "assistant", "Bonsoir", "p2"),
+        ],
+      }),
+    );
+    expect(result.system).toContain("[SCÈNE]");
+    expect(result.system).toContain("- Marc — a quitté la scène.");
+    // Les répliques de l'absent ne passent pas pour celles du locuteur.
+    expect(
+      result.messages.filter((m) => m.role === "assistant").map((m) => m.content),
+    ).toEqual(["Salut"]);
+  });
+
   it("n'ajoute aucune section scène quand le personnage est seul", () => {
     const result = assemblePrompt(
       baseInput({ scene: { ...scene, otherNames: [], others: [] } }),

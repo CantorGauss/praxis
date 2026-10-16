@@ -68,7 +68,7 @@ export const enPrompts: PromptPack = {
     genderClause,
     selfGenderClause,
 
-    sceneBlock: ({ speakerName, speakerGender, others, userName, userGender }) => {
+    sceneBlock: ({ speakerName, speakerGender, others, departed = [], userName, userGender }) => {
       const otherNames = others.map((o) => o.name);
       const roster = [
         `- ${userName} — the human being who is using the application. ` +
@@ -85,6 +85,11 @@ export const enPrompts: PromptPack = {
           },
         ),
         `- ${speakerName} — you. ${selfGenderClause(speakerGender)}`,
+        ...departed.map(
+          (name) =>
+            `- ${name} — has left the scene. Their past lines remain in the ` +
+            `history, but ${name} is no longer here and cannot hear you.`,
+        ),
       ].join("\n");
 
       return [
@@ -142,6 +147,10 @@ export const enPrompts: PromptPack = {
       `${userName} has said nothing for ${turns} line${turns > 1 ? "s" : ""}: ` +
       `do not attribute to ${userName} words spoken by a character, and do not ` +
       `answer them as if they had just spoken.`,
+    departedReminder: (names) =>
+      `${enumerate(names)} ${names.length > 1 ? "have" : "has"} left the scene ` +
+      `and can no longer hear anything: do not address ${names.length > 1 ? "them" : enumerate(names)} ` +
+      `or reply to them any more. Talk to whoever is still here.`,
 
     sceneEvent: (userName) =>
       `Something has just happened in the room — see the most recent ` +

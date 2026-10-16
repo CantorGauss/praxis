@@ -139,6 +139,8 @@ export type SceneBlockOptions = {
     /** Une ligne issue de la fiche, distincte du prompt de personnalité. */
     description?: string | null;
   }[];
+  /** Personnages qui ont parlé plus tôt mais ne sont plus en scène. */
+  departed?: string[];
   userName?: string;
   userGender?: SceneGender;
   /** À qui s'adresse le dernier message ; calculé par le directeur. */
@@ -159,6 +161,7 @@ export function buildSceneBlock(
     speakerName: options.speakerName,
     speakerGender: options.speakerGender ?? "neutral",
     others: options.others,
+    departed: options.departed ?? [],
     userName: options.userName ?? pack.scene.userLabel,
     userGender: options.userGender ?? "neutral",
   });
@@ -401,16 +404,22 @@ export function describeLastTurn(
     userName: string;
     /** Répliques écoulées depuis le dernier message de l'utilisateur. */
     userSilentTurns: number;
+    /** Personnages sortis : la dernière réplique peut venir de l'un d'eux. */
+    departedNames?: string[];
   },
   pack: PromptPack = DEFAULT_PROMPT_PACK,
 ): string {
   const { lastSpeakerName, lastAddresseeName, userName, userSilentTurns } = options;
+  const departedNames = options.departedNames ?? [];
   const lines: string[] = [];
   if (lastSpeakerName) {
     lines.push(pack.scene.lastTurnSpeaker(lastSpeakerName, lastAddresseeName));
   }
   if (userSilentTurns > 0) {
     lines.push(pack.scene.lastTurnUserSilent(userName, userSilentTurns));
+  }
+  if (departedNames.length > 0) {
+    lines.push(pack.scene.departedReminder(departedNames));
   }
   return lines.join("\n");
 }

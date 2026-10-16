@@ -1559,8 +1559,26 @@ class AppState {
 
     const others = this.participants.filter((p) => p.id !== speaker.id);
     const otherNames = others.map((p) => p.name);
+    // Ceux qui ont parlé puis sont sortis : leurs répliques restent dans
+    // l'historique. Sans les nommer comme absents, le locuteur continue de
+    // leur répondre — et s'il reste seul, leurs lignes passeraient même pour
+    // les siennes.
+    const departedNames = [
+      ...new Set(
+        this.messages
+          .filter(
+            (m) =>
+              m.role === "assistant" &&
+              m.kind === "speech" &&
+              m.personaId &&
+              m.personaId !== speaker.id &&
+              !this.participantIds.includes(m.personaId),
+          )
+          .map((m) => this.labelFor(m)),
+      ),
+    ].filter((name) => name !== speaker.name && !otherNames.includes(name));
     const scene: SceneInput | null =
-      otherNames.length > 0
+      otherNames.length > 0 || departedNames.length > 0
         ? {
             speakerId: speaker.id,
             speakerName: speaker.name,
@@ -1574,6 +1592,7 @@ class AppState {
               gender: p.gender,
               description: p.description,
             })),
+            departedNames,
             userGender: this.settings.userGender,
             label: this.labelFor,
             addresseeLabel: this.addresseeLabelFor(speaker.id),
@@ -1637,6 +1656,7 @@ class AppState {
           : null,
         userName: this.userName,
         userSilentTurns: this.consecutiveAiTurns,
+        departedNames,
       },
       this.pack,
     );
@@ -1753,7 +1773,12 @@ class AppState {
         streamUpdates.flush();
         const raw = rawContent;
         const content = scene
-          ? cleanSpeakerReply(raw, speaker.name, otherNames, this.userName)
+          ? cleanSpeakerReply(
+              raw,
+              speaker.name,
+              [...otherNames, ...departedNames],
+              this.userName,
+            )
           : raw;
         // À qui le personnage vient de parler, figé une fois pour toutes.
         const addressee = scene

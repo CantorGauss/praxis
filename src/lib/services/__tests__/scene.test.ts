@@ -239,6 +239,32 @@ describe("describeLastTurn", () => {
     expect(text).toContain("Jeff has said nothing for 4 lines");
   });
 
+  it("rappelle qu'un personnage sorti n'est plus là", () => {
+    const texte = describeLastTurn(
+      {
+        lastSpeakerName: "Marc",
+        lastAddresseeName: "toi",
+        userName: "Jeff",
+        userSilentTurns: 0,
+        departedNames: ["Marc"],
+      },
+      FR,
+    );
+    expect(texte).toContain("Marc a quitté la scène");
+    expect(texte).toContain("ne lui réponds pas");
+    const text = describeLastTurn(
+      {
+        lastSpeakerName: null,
+        lastAddresseeName: null,
+        userName: "Jeff",
+        userSilentTurns: 0,
+        departedNames: ["Marc", "Léa"],
+      },
+      enPrompts,
+    );
+    expect(text).toContain("Marc and Léa have left the scene");
+  });
+
   it("ne dit rien quand personne n'a encore parlé", () => {
     for (const pack of [enPrompts, FR]) {
       expect(

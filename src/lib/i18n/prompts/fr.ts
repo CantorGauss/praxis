@@ -64,7 +64,7 @@ export const frPrompts: PromptPack = {
     genderClause,
     selfGenderClause,
 
-    sceneBlock: ({ speakerName, speakerGender, others, userName, userGender }) => {
+    sceneBlock: ({ speakerName, speakerGender, others, departed = [], userName, userGender }) => {
       const otherNames = others.map((o) => o.name);
       const roster = [
         `- ${userName} — la personne humaine qui utilise l'application. ` +
@@ -81,6 +81,11 @@ export const frPrompts: PromptPack = {
           },
         ),
         `- ${speakerName} — toi. ${selfGenderClause(speakerGender)}`,
+        ...departed.map(
+          (name) =>
+            `- ${name} — a quitté la scène. Ses répliques passées restent dans ` +
+            `l'historique, mais ${name} n'est plus là et ne t'entend plus.`,
+        ),
       ].join("\n");
 
       return [
@@ -139,6 +144,11 @@ export const frPrompts: PromptPack = {
       `${userName} n'a rien dit depuis ${turns} réplique${turns > 1 ? "s" : ""} : ` +
       `n'attribue pas à ${userName} des propos tenus par un personnage, et ne ` +
       `lui réponds pas comme s'il venait de parler.`,
+    departedReminder: (names) =>
+      `${enumerate(names)} ${names.length > 1 ? "ont" : "a"} quitté la scène et ` +
+      `n'${names.length > 1 ? "entendent" : "entend"} plus rien : ne t'adresse ` +
+      `plus à ${names.length > 1 ? "eux" : enumerate(names)}, ne ${names.length > 1 ? "leur" : "lui"} ` +
+      `réponds pas. Parle à ceux qui sont encore là.`,
 
     sceneEvent: (userName) =>
       `Quelque chose vient de se produire dans la pièce — vois la ligne ` +

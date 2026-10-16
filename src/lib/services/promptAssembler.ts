@@ -38,6 +38,12 @@ export type SceneInput = {
     /** Courte description visible dans la fiche ; jamais le prompt interne. */
     description?: string | null;
   }[];
+  /**
+   * Personnages qui ont parlé mais ont quitté la scène. Leurs répliques
+   * restent dans l'historique : sans cette liste, le locuteur continue de
+   * leur répondre.
+   */
+  departedNames?: string[];
   userGender?: SceneGender;
   label: MessageLabeller;
   addresseeLabel?: AddresseeLabeller;
@@ -122,7 +128,7 @@ function buildSystemPrompt(
   parts.push(a.momentum());
 
   const scene = input.scene;
-  if (scene && scene.otherNames.length > 0) {
+  if (scene && (scene.otherNames.length > 0 || scene.departedNames?.length)) {
     // Le trombinoscope est stable ; la consigne de destinataire change à
     // chaque tour et part donc dans le suffixe.
     parts.push(
@@ -131,6 +137,7 @@ function buildSystemPrompt(
           speakerName: scene.speakerName,
           speakerGender: scene.speakerGender,
           others: scene.others,
+          departed: scene.departedNames,
           userName,
           userGender,
         },
