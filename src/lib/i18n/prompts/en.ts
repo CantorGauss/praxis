@@ -239,6 +239,22 @@ export const enPrompts: PromptPack = {
       );
     },
 
+    asides: () =>
+      `[ASIDES]\n` +
+      `As in the theatre, you may slip in an aside: a line spoken to the ` +
+      `audience that nobody in the scene hears. Write it exactly in this form, ` +
+      `in parentheses: "(aside: I never liked this cake)".\n` +
+      `It is the place for an unspeakable thought, a jibe, a confession, a ` +
+      `secret plan or a wry comment about the others — never a repeat of your ` +
+      `line. At most one short aside per line, and most of your lines have ` +
+      `none. The others do not react to your asides, and you do not hear ` +
+      `theirs. Do not give away in your spoken line what you said in an aside.`,
+
+    asideNudge: () =>
+      `[ASIDE]\nIf your character is thinking something they would never say ` +
+      `out loud, now is the moment: slip a short "(aside: …)" to the audience ` +
+      `in addition to your line.`,
+
     conversationSummary: (summary) => `[CONVERSATION SUMMARY]\n${summary}`,
 
     immediateReaction: ({ moodLabel, intensityPercent, impulse }) => {
@@ -351,13 +367,58 @@ export const enPrompts: PromptPack = {
       "the scene truly calls for them;\n" +
       "- give the characters something to react to, decide or argue about.\n" +
       "Reply with the stage direction only, no prefix, quotes or commentary.",
-    user: ({ situation, summary, roster, transcript }) =>
+    user: ({ situation, summary, roster, transcript, theme }) =>
       (situation ? `Starting situation:\n${situation}\n\n` : "") +
       (summary ? `What has happened so far:\n${summary}\n\n` : "") +
       `Characters present:\n${roster}\n\n` +
       `Latest lines:\n${transcript}\n\n` +
+      (theme ? `The audience is calling for a twist. Requested flavour: ${theme}\n\n` : "") +
       "Write the stage direction now.",
+    themes: {
+      surprise:
+        "free — surprise us, while keeping to the tone of the scene.",
+      catastrophe:
+        "a small disaster. Something breaks, overflows, catches fire or goes " +
+        "wrong: enough to cause panic, without seriously hurting anyone.",
+      romance:
+        "a hint of romance. A love note, an anonymous gift, a startled glance, " +
+        "a gesture that is a little too tender: enough to fluster someone.",
+      absurd:
+        "downright absurd. Here the improbable is allowed: a comic, unlikely " +
+        "event (an unexpected animal, an object with no business being there, " +
+        "a ridiculous coincidence), described with a perfectly straight face.",
+      mystery:
+        "a mystery. A clue, an unsigned letter, an object that has moved, a " +
+        "disappearance: something nobody can explain.",
+      revelation:
+        "a coup de théâtre. A secret comes out, proof turns up, someone is " +
+        "unmasked: a fact that turns the situation upside down.",
+    },
     stripPrefixes: ["scene", "stage direction", "twist", "event"],
+  },
+
+  review: {
+    system: ({ userName }) =>
+      "You are a theatre critic: witty, a little catty, never cruel. " +
+      `You have just watched an improvised play between some characters and ${userName}, ` +
+      "who plays themselves in it. Write the review that runs in tomorrow's paper.\n" +
+      "Rules:\n" +
+      "- draw on specific moments — a line, a gesture, a twist marked \"Scene\", " +
+      "an aside — and name whoever played them;\n" +
+      "- an \"(aside: …)\" is spoken to the audience: you heard it, the other " +
+      "characters did not. Feel free to enjoy that;\n" +
+      "- rate the evening from 1 to 5 stars, without flattery: 5 is rare;\n" +
+      "- make up the name of your paper (a funny fictional masthead) and a " +
+      "catchy headline;\n" +
+      "- the review is three to five witty sentences, in the present tense.\n" +
+      "Reply ONLY with JSON, no commentary: " +
+      '{"newspaper":"…","headline":"…","stars":3,"review":"…"}',
+    user: ({ situation, summary, roster, transcript }) =>
+      (situation ? `Starting situation:\n${situation}\n\n` : "") +
+      (summary ? `The play so far, in summary:\n${summary}\n\n` : "") +
+      `Cast:\n${roster}\n\n` +
+      `The play:\n${transcript}\n\n` +
+      "Curtain. Write your review.",
   },
 
   coordination: {

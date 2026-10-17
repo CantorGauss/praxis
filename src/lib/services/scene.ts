@@ -1,6 +1,7 @@
 import type { Gender, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import type { ChatMessage } from "./llmClient";
+import { publicText } from "./messageFormat";
 
 /**
  * Conversations à plusieurs personnages.
@@ -117,12 +118,16 @@ export function renderTranscript(
       flush();
       rendered.push({ role: "assistant", content: message.content });
     } else {
+      // Les apartés des autres ne sont pas entendus : seul leur auteur s'en
+      // souvient. Une réplique faite d'un seul aparté n'existe pas pour lui.
+      const heard = publicText(message.content);
+      if (!heard.trim()) continue;
       const name = label(message);
       speakers.add(name);
       // Le destinataire est annoté : sans lui, le « tu » d'une réplique
       // transmise n'a pas de référent, et celui qui la lit se croit visé.
       const to = addressee?.(message) ?? null;
-      buffer.push(pack.scene.transcriptLine(name, to, message.content));
+      buffer.push(pack.scene.transcriptLine(name, to, heard));
     }
   }
   flush();

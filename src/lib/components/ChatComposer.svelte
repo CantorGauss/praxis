@@ -4,6 +4,8 @@
   import Avatar from "./Avatar.svelte";
   import { t } from "../i18n/ui.svelte";
   import { findMentions } from "../services/scene";
+  import { TWIST_THEMES } from "../services/twist";
+  import type { TwistTheme } from "../i18n/prompts";
   import type { Persona } from "../types";
 
   let { height = $bindable(0) }: { height?: number } = $props();
@@ -16,6 +18,19 @@
   let composerMode = $state<"speech" | "scene">("speech");
   let inputEl = $state<HTMLTextAreaElement | null>(null);
   let showComposerTools = $state(false);
+  let showTwistMenu = $state(false);
+  /** Petit tour de dé à chaque lancer, pour le plaisir. */
+  let diceRolls = $state(0);
+
+  const twistPending = $derived(
+    app.pendingSceneActions.some((action) => action.kind === "twist"),
+  );
+
+  function rollTwist(theme: TwistTheme) {
+    showTwistMenu = false;
+    diceRolls += 1;
+    void app.triggerTwist(theme);
+  }
 
   const group = $derived(app.isGroupConversation);
   const streamingPersona = $derived(app.personaById(app.streamingPersonaId));
@@ -82,7 +97,10 @@
   }
 
   function onWindowKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") showComposerTools = false;
+    if (event.key === "Escape") {
+      showComposerTools = false;
+      showTwistMenu = false;
+    }
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -206,6 +224,22 @@
     return deferred ? s.chat.sendLater(base) : base;
   });
 
+  /** Insère « (aparté : …) » autour de la sélection, curseur à l'intérieur. */
+  function insertAside() {
+    const element = inputEl;
+    const start = element?.selectionStart ?? input.length;
+    const end = element?.selectionEnd ?? input.length;
+    const selected = input.slice(start, end);
+    const before = input.slice(0, start);
+    const open = `${before && !/\s$/.test(before) ? " " : ""}(${s.chat.asidePrefix}`;
+    input = `${before}${open}${selected})${input.slice(end)}`;
+    void tick().then(() => {
+      element?.focus();
+      const caret = start + open.length + selected.length;
+      element?.setSelectionRange(caret, caret);
+    });
+  }
+
   function insertAction() {
     const element = inputEl;
     const start = element?.selectionStart ?? input.length;
@@ -248,6 +282,35 @@
           <span>{floorHint}</span>
         {/if}
       </div>
+      {#if app.currentConversation && app.participants.length > 0}
+        <div class="twist-wrap">
+          <button
+            class="btn twist-button"
+            class:on={showTwistMenu || twistPending}
+            aria-expanded={showTwistMenu}
+            title={s.twist.title}
+            disabled={twistPending}
+            onclick={() => (showTwistMenu = !showTwistMenu)}
+          >
+            {#key diceRolls}<span class="die" class:rolled={diceRolls > 0} aria-hidden="true">🎲</span>{/key}
+            {s.twist.button}
+          </button>
+          {#if showTwistMenu}
+            <div class="twist-menu" role="menu" aria-label={s.twist.menuTitle}>
+              <div class="twist-menu-title">{s.twist.menuTitle}</div>
+              {#each TWIST_THEMES as theme (theme)}
+                <button role="menuitem" onclick={() => rollTwist(theme)}>
+                  <span class="twist-icon" aria-hidden="true">{s.twist.themes[theme].icon}</span>
+                  <span class="twist-copy">
+                    <span>{s.twist.themes[theme].label}</span>
+                    <small>{s.twist.themes[theme].hint}</small>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
       {#if group}
         <button
           class="btn silence-button"
@@ -293,6 +356,9 @@
             {#if composerMode === "speech"}
               <button onclick={() => { insertAction(); showComposerTools = false; }}>
                 <span>{s.chat.insertAction}</span><small>{s.chat.insertActionHint}</small>
+              </button>
+              <button onclick={() => { insertAside(); showComposerTools = false; }}>
+                <span>🤫 {s.chat.insertAside}</span><small>{s.chat.insertAsideHint}</small>
               </button>
             {/if}
           </div>
@@ -437,8 +503,96 @@
     gap: 7px 12px;
   }
 
-  .silence-button {
+  .twist-wrap {
+    position: relative;
     margin-left: auto;
+  }
+
+  .twist-button {
+    min-height: 30px;
+    font-size: 11.5px;
+    gap: 6px;
+  }
+
+  .twist-button .die {
+    display: inline-block;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .twist-button .die.rolled {
+      animation: die-roll 0.7s var(--spring) both;
+    }
+
+    .twist-button:hover:not(:disabled) .die {
+      transform: rotate(-14deg) scale(1.12);
+      transition: transform 0.2s var(--spring);
+    }
+  }
+
+  @keyframes die-roll {
+    0% { transform: rotate(0) scale(1); }
+    40% { transform: rotate(320deg) scale(1.35) translateY(-4px); }
+    100% { transform: rotate(720deg) scale(1); }
+  }
+
+  .twist-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 9px);
+    z-index: 25;
+    width: 268px;
+    padding: 7px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--menu-bg);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    transform-origin: bottom right;
+    animation: tools-pop 0.3s var(--spring) both;
+  }
+
+  .twist-menu-title {
+    padding: 5px 10px 7px;
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .twist-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    color: var(--text-soft);
+    text-align: left;
+  }
+
+  .twist-menu button:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+
+  .twist-icon {
+    font-size: 19px;
+    width: 24px;
+    text-align: center;
+  }
+
+  .twist-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .twist-copy small {
+    color: var(--text-faint);
+    font-size: 10.5px;
+  }
+
+  .silence-button {
     min-height: 30px;
     font-size: 11.5px;
   }

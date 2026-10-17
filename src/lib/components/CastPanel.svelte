@@ -77,6 +77,11 @@
       pending = null;
     }
   }
+
+  /** Entrées et sorties en attente ; un imprévu en file s'annonce ailleurs. */
+  const castActions = $derived(
+    app.pendingSceneActions.filter((action) => action.kind !== "twist"),
+  );
 </script>
 
 <aside class="cast-panel">
@@ -95,10 +100,10 @@
   </header>
 
   <div class="scroll">
-    {#if app.pendingSceneActions.length > 0}
+    {#if castActions.length > 0}
       <div class="pending-actions" aria-live="polite">
         <strong>{s.cast.afterCurrentTurn}</strong>
-        {#each app.pendingSceneActions as action}
+        {#each castActions as action}
           {@const who =
             app.personaById(action.personaId)?.name ??
             s.cast.theCharacter}

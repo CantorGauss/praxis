@@ -89,6 +89,16 @@ describe("renderTranscript", () => {
     ]);
   });
 
+  it("ne transmet pas les apartés des autres, ni une réplique faite d'un seul aparté", () => {
+    const messages = [
+      msg(ANNA.id, "Bravo Marc. (aparté : quel désastre)"),
+      msg(null, "(aparté : je m'ennuie)"),
+    ];
+    expect(renderTranscript(messages, MARC.id, label, undefined, FR)).toEqual([
+      { role: "user", content: "Anna : Bravo Marc." },
+    ]);
+  });
+
   it("ignore les messages vides, y compris celui en cours de rédaction", () => {
     const messages = [
       msg(null, "Question"),

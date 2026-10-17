@@ -1,6 +1,7 @@
 import type { ConnectionTarget, Conversation, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
+import { publicText } from "./messageFormat";
 import { estimateTokens } from "./promptAssembler";
 import { conversationRepo } from "./repositories";
 import type { MessageLabeller } from "./scene";
@@ -205,7 +206,9 @@ export async function updateSummary(
   // Les répliques sont nommées : sans cela, les propos de plusieurs
   // personnages se mélangeraient dans le résumé.
   const block = toSummarize
-    .map((m) => pack.summary.messageLine(label(m), m.content))
+    // Le résumé est partagé par tous les personnages : les apartés n'y entrent pas.
+    .filter((m) => publicText(m.content).trim())
+    .map((m) => pack.summary.messageLine(label(m), publicText(m.content)))
     .join("\n\n");
 
   try {

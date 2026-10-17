@@ -285,6 +285,11 @@ export const frUi: UiStrings = {
     sceneEventHint: "Un bruit, une arrivée, un incident…",
     insertAction: "Insérer une action",
     insertActionHint: "Ajoute des *astérisques*",
+    insertAside: "Glisser un aparté",
+    insertAsideHint: "Dit au public : aucun personnage ne l'entend",
+    asidePrefix: "aparté : ",
+    aside: "aparté",
+    asideHint: "Dit au public : personne en scène ne l'entend",
     to: "À",
     whoShouldAnswer: "Qui doit répondre",
     auto: "Auto",
@@ -318,6 +323,72 @@ export const frUi: UiStrings = {
     theCharacter: "Le personnage",
     floorHintAutonomous: "écrivez : vous reprenez la parole après cette réplique",
     floorHintDeferred: "vous pouvez écrire : votre message partira à la fin du tour",
+  },
+
+  curtainCall: {
+    button: "Rideau",
+    buttonTitle: "Baisser le rideau : la critique et les Molières de la soirée",
+    kicker: "Le lendemain matin",
+    title: "Revue de presse",
+    close: "Relever le rideau",
+    defaultPaper: "La Gazette des coulisses",
+    starsAria: (n: number) => `${n} étoile${n > 1 ? "s" : ""} sur 5`,
+    reviewLoading: "Le critique griffonne dans son carnet…",
+    reviewFailed: "Le critique s'est éclipsé avant la fin.",
+    retry: "Redemander une critique",
+    rewrite: "Une autre critique",
+    tooEarly: (min: number) =>
+      `Trop tôt pour une critique : jouez au moins ${min} répliques, le critique ` +
+      `n'est pas resté pour si peu.`,
+    awardsTitle: "Les Molières de la soirée",
+    noAwards: "Pas encore de lauréat : la soirée ne fait que commencer.",
+    director: "Le metteur en scène",
+    stats: (lines: number, narrations: number, twists: number, asides: number) =>
+      [
+        `${lines} réplique${lines > 1 ? "s" : ""}`,
+        narrations ? `${narrations} didascalie${narrations > 1 ? "s" : ""}` : "",
+        twists ? `${twists} imprévu${twists > 1 ? "s" : ""}` : "",
+        asides ? `${asides} aparté${asides > 1 ? "s" : ""}` : "",
+      ].filter(Boolean).join(" · "),
+    awards: {
+      chatterbox: { icon: "🗣️", title: "Prix du moulin à paroles", detail: (n: number) => `${n} mots au compteur` },
+      volcano: { icon: "🌋", title: "Prix du volcan", detail: (n: number) => `colère à ${n} %` },
+      drama: { icon: "🎭", title: "Prix du mélodrame", detail: (n: number) => `émotion à ${n} %` },
+      sunshine: { icon: "☀️", title: "Prix du rayon de soleil", detail: (n: number) => `joie à ${n} %` },
+      diplomat: { icon: "🕊️", title: "Prix de la diplomatie", detail: (n: number) => `${n} accords donnés` },
+      contrarian: { icon: "✋", title: "Prix de l'esprit de contradiction", detail: (n: number) => `${n} objections` },
+      yesBut: {
+        icon: "🤏",
+        title: "Prix du « oui, mais… »",
+        detail: (n: number) => `${n} accord${n > 1 ? "s" : ""} sous condition`,
+      },
+      curious: { icon: "🔍", title: "Prix de la curiosité", detail: (n: number) => `${n} répliques qui posent question` },
+      whisperer: {
+        icon: "🤫",
+        title: "Prix de l'aparté",
+        detail: (n: number) => `${n} confidence${n > 1 ? "s" : ""} au public`,
+      },
+      wallflower: {
+        icon: "🪴",
+        title: "Prix de la plante verte",
+        detail: (n: number) => (n === 0 ? "pas un mot de la soirée" : `${n} réplique${n > 1 ? "s" : ""} en tout et pour tout`),
+      },
+      twist: { icon: "✦", title: "Prix du coup de théâtre", detail: (_n: number) => "décerné à l'imprévu" },
+    },
+  },
+
+  twist: {
+    button: "Imprévu",
+    title: "Faire arriver quelque chose dans la scène",
+    menuTitle: "Quel genre d'imprévu ?",
+    themes: {
+      surprise: { icon: "🎲", label: "Surprise", hint: "Au hasard du metteur en scène" },
+      catastrophe: { icon: "🔥", label: "Catastrophe", hint: "Ça casse, ça déborde, ça panique" },
+      romance: { icon: "💌", label: "Romance", hint: "Un billet doux, un regard troublé" },
+      absurd: { icon: "🦙", label: "Absurde", hint: "L'improbable, avec le plus grand sérieux" },
+      mystery: { icon: "🕵️", label: "Mystère", hint: "Un indice que personne n'explique" },
+      revelation: { icon: "💥", label: "Coup de théâtre", hint: "Un secret éclate" },
+    },
   },
 
   coordination: {
@@ -602,6 +673,8 @@ export const frUi: UiStrings = {
   app: {
     narrationSpeaker: "Scène",
     generatedTwist: "Imprévu écrit par le modèle pour relancer la scène",
+    twistWillHappen: "L'imprévu arrivera dès la fin de la réplique en cours.",
+    twistFailed: "Le metteur en scène n'a rien trouvé cette fois. Relancez le dé !",
     personaWillEnter: (name: string) =>
       `${name} entrera dès la fin du tour en cours.`,
     personaWillLeave: (name: string) =>

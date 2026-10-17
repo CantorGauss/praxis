@@ -474,4 +474,45 @@ describe("assemblePrompt en scène de groupe", () => {
     );
     expect(result.system).not.toContain("[SCÈNE]");
   });
+
+  it("explique les apartés en scène de groupe, et seulement là", () => {
+    expect(assemblePrompt(baseInput({ scene })).system).toContain("[APARTÉS]");
+    expect(assemblePrompt(baseInput()).system).not.toContain("[APARTÉS]");
+  });
+
+  it("n'invite à l'aparté qu'en fin de requête, et seulement sur demande", () => {
+    const nudged = assemblePrompt(baseInput({ scene, asideNudge: true }));
+    expect(nudged.system).not.toContain("[APARTÉ]\n");
+    expect(nudged.messages.at(-1)?.content).toContain("[APARTÉ]\n");
+    const plain = assemblePrompt(baseInput({ scene }));
+    expect(plain.messages.at(-1)?.content).not.toContain("[APARTÉ]\n");
+  });
+
+  it("cache aux autres les apartés d'un personnage, pas à son auteur", () => {
+    const recentMessages = [
+      message("1", "user", "On partage le gâteau ?"),
+      message("2", "assistant", "Avec plaisir ! (aparté : je le déteste)", "p2"),
+      message("3", "assistant", "(aparté : Marc ment, évidemment)", "p1"),
+    ];
+    const asAnna = assemblePrompt(baseInput({ scene, recentMessages }));
+    const annaSees = asAnna.messages.slice(1).map((m) => m.content).join("\n");
+    expect(annaSees).toContain("Marc : Avec plaisir !");
+    expect(annaSees).not.toContain("je le déteste");
+    expect(annaSees).toContain("(aparté : Marc ment, évidemment)");
+  });
+
+  it("cache au personnage l'aparté de l'utilisateur en tête-à-tête", () => {
+    const result = assemblePrompt(
+      baseInput({
+        recentMessages: [
+          message("1", "user", "Bonjour"),
+          message("2", "assistant", "Bonjour Jeff"),
+          message("3", "user", "Quel beau pull. (aparté : il est affreux)"),
+        ],
+      }),
+    );
+    const sent = result.messages.slice(1).map((m) => m.content).join("\n");
+    expect(sent).toContain("Quel beau pull.");
+    expect(sent).not.toContain("affreux");
+  });
 });

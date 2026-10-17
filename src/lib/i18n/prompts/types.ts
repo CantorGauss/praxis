@@ -18,6 +18,7 @@ export type PromptPack = {
   assembler: AssemblerPrompts;
   director: DirectorPrompts;
   twist: TwistPrompts;
+  review: ReviewPrompts;
   coordination: {
     analysisSystem: string;
     context(data: string): string;
@@ -98,6 +99,10 @@ export type AssemblerPrompts = {
   /** Rappel saillant placé juste avant la réponse, près de la dernière réplique. */
   sceneReminder(situation: string): string;
   writingConventions(userName: string, userGender: Gender): string;
+  /** Règle des apartés, en scène de groupe : dits au public, entendus de personne. */
+  asides(): string;
+  /** Invitation ponctuelle à en glisser un, placée en fin de requête. */
+  asideNudge(): string;
   conversationSummary(summary: string): string;
   immediateReaction(input: {
     moodLabel: string;
@@ -136,6 +141,15 @@ export type DirectorPrompts = {
 /** Pourquoi la scène est jugée enlisée ; voir `detectStagnation`. */
 export type StagnationReason = "echo" | "low-novelty" | "consensus";
 
+/** Couleur d'un imprévu demandé par l'utilisateur. */
+export type TwistTheme =
+  | "surprise"
+  | "catastrophe"
+  | "romance"
+  | "absurd"
+  | "mystery"
+  | "revelation";
+
 export type TwistPrompts = {
   system(input: { userName: string }): string;
   user(input: {
@@ -143,9 +157,24 @@ export type TwistPrompts = {
     summary: string | null;
     roster: string;
     transcript: string;
+    /** Consigne de ton, quand l'utilisateur a choisi un thème. */
+    theme?: string | null;
   }): string;
+  /** Consigne propre à chaque thème, ajoutée à la demande. */
+  themes: Record<TwistTheme, string>;
   /** Préfixes qu'un modèle ajoute volontiers et qu'on retire de la didascalie. */
   stripPrefixes: readonly string[];
+};
+
+/** La critique du lendemain, écrite au baisser de rideau. */
+export type ReviewPrompts = {
+  system(input: { userName: string }): string;
+  user(input: {
+    situation: string | null;
+    summary: string | null;
+    roster: string;
+    transcript: string;
+  }): string;
 };
 
 export type SummaryPrompts = {

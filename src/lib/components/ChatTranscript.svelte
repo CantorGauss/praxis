@@ -6,7 +6,7 @@
   import { bubbleTone, tint, type BubbleTone } from "../services/bubbleTone";
   import { MOOD_LABELS_BY_LOCALE } from "../i18n/moods";
   import { t, uiLocale } from "../i18n/ui.svelte";
-  import { splitActions } from "../services/messageFormat";
+  import { splitMessage } from "../services/messageFormat";
   import { detectAddressee } from "../services/scene";
   import { USER_ADDRESSEE, type DialogueIntent, type Message } from "../types";
 
@@ -281,8 +281,10 @@
                 {#if m.status === "streaming" && !m.content}<span
                     class="typing"
                     aria-label={s.chat.isAnswering(speakerName)}
-                  ><i></i><i></i><i></i></span>{/if}{#each splitActions(m.content) as seg}{#if seg.kind === "action"}<span
-                      class="rp-action">{seg.text}</span>{:else}{seg.text}{/if}{/each}{#if m.status === "streaming" && m.content}<span class="cursor">▍</span>{/if}
+                  ><i></i><i></i><i></i></span>{/if}{#each splitMessage(m.content) as seg}{#if seg.kind === "action"}<span
+                      class="rp-action">{seg.text}</span>{:else if seg.kind === "aside"}<span
+                      class="rp-aside" title={s.chat.asideHint}><span class="aside-tag"
+                        aria-hidden="true">🤫 {s.chat.aside}</span>{seg.text}</span>{:else}{seg.text}{/if}{/each}{#if m.status === "streaming" && m.content}<span class="cursor">▍</span>{/if}
                 {#if m.status === "cancelled"}
                   <div class="status-label">{s.chat.interrupted}</div>
                 {/if}
@@ -676,6 +678,30 @@
     content: " ·";
     color: var(--text-faint);
     font-style: normal;
+  }
+
+  /* Aparté : dit au public, hors de portée des autres personnages. */
+  .rp-aside {
+    display: block;
+    margin: 7px 0 3px;
+    padding: 6px 11px 7px;
+    border-left: 2px dotted var(--accent);
+    border-radius: 4px 10px 10px 4px;
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    font-family: var(--font-stage);
+    font-size: 0.94em;
+    color: var(--text-soft);
+  }
+
+  .aside-tag {
+    display: block;
+    margin-bottom: 2px;
+    font-family: var(--font);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
   }
 
   .bubble.editing {

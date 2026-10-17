@@ -114,6 +114,17 @@
           )
         : s.chat.unreachable(app.activeConnection?.name ?? s.chat.serverFallback)}
     ></span>
+    {#if app.currentConversation}
+      <button
+        class="btn"
+        class:on={app.curtainCallOpen}
+        onclick={() => app.lowerCurtain()}
+        title={s.curtainCall.buttonTitle}
+      >
+        <span class="scene-icon" aria-hidden="true">🎭</span>
+        {s.curtainCall.button}
+      </button>
+    {/if}
     <button
       class="btn"
       class:on={app.castPanelOpen}

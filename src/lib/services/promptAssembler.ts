@@ -9,6 +9,7 @@ import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
+import { publicText } from "./messageFormat";
 import {
   buildSceneBlock,
   renderTranscript,
@@ -65,6 +66,8 @@ export type AssembleInput = {
   coordination?: string;
   /** La scène tourne en rond : une consigne de relance clôt la requête. */
   stagnation?: StagnationReason | null;
+  /** Invitation ponctuelle à glisser un aparté ; seulement en scène de groupe. */
+  asideNudge?: boolean;
   recentMessages: Message[]; // du plus ancien au plus récent
   /** Situation de départ de la conversation, connue de tous les personnages. */
   sceneDescription?: string | null;
@@ -157,6 +160,11 @@ function buildSystemPrompt(
   // la même convention, sinon il lit les actions comme des paroles.
   parts.push(a.writingConventions(userName, userGender));
 
+  // Un aparté n'a de sens que s'il y a quelqu'un en scène pour ne pas l'entendre.
+  if (scene && scene.otherNames.length > 0) {
+    parts.push(a.asides());
+  }
+
   if (includeSummary && summary) {
     parts.push(a.conversationSummary(summary));
   }
@@ -214,6 +222,10 @@ function buildVolatileBlock(input: AssembleInput): string {
 
   if (input.stagnation) volatileParts.push(a.stagnation(input.stagnation));
 
+  if (input.asideNudge && scene && scene.otherNames.length > 0) {
+    volatileParts.push(a.asideNudge());
+  }
+
   // Les petits modèles suivent parfois mieux les faits proches de la
   // génération que les mêmes faits placés tôt dans le système. La situation
   // reste dans le préfixe stable, mais ce rappel l'ancre aussi au moment exact
@@ -257,7 +269,13 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
         input.scene.addresseeLabel,
         pack,
       )
-    : usable.map((m) => ({ role: m.role, content: m.content }));
+    : usable
+        // En tête-à-tête, l'aparté de l'utilisateur reste pour le public.
+        .map((m) => ({
+          role: m.role,
+          content: m.role === "user" ? publicText(m.content) : m.content,
+        }))
+        .filter((m) => m.content.trim().length > 0);
   const last = messages[messages.length - 1];
   const lastTokens = last ? estimateTokens(last.content) + 8 : 0;
 
