@@ -60,6 +60,25 @@ also drop in a short stage direction of its own (marked ✦): news arriving, an
 incident, an unexpected gesture. At most once every eight lines, never right
 after you speak, and you can switch it off in Settings.
 
+Or roll the die yourself. The **🎲 Twist** button beside the composer asks for
+one right now, in the flavour you pick — surprise, disaster, romance, absurd,
+mystery or coup de théâtre — and someone in the room reacts to it. If a
+character is mid-line, the twist lands as soon as they finish.
+
+**They say things behind each other's backs.** In a group scene a character can
+slip in an aside to the audience: `(aside: I never liked this cake)`. You see
+it, set apart in their bubble; nobody else on stage does — it never reaches the
+other characters, the director or the shared memory. Every so often a
+character is nudged to try one. You can do the same from the **+** menu.
+
+**And then the reviews come in.** Click **🎭 Curtain** in the header to pause
+the scene and read tomorrow's paper: a model-written review with a made-up
+masthead and a star rating — the critic was in the audience and heard every
+aside — plus the evening's awards, worked out from what actually happened on
+stage: most words, angriest line, most objections, most "yes, but…", the
+potted plant who barely spoke, the best twist. Raise the curtain and the scene
+picks up where it left off.
+
 **They're in a mood, and it lasts.** Before a character answers, Praxis works
 out how they'd actually feel about what just happened — startled, delighted,
 furious, quietly hurt — and that colours how they write. Drop something heavy on

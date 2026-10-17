@@ -4,6 +4,7 @@
   import ChatHeader from "./ChatHeader.svelte";
   import ChatTranscript from "./ChatTranscript.svelte";
   import CoordinationPanel from "./CoordinationPanel.svelte";
+  import CurtainCall from "./CurtainCall.svelte";
 
   let composerHeight = $state(0);
 </script>
@@ -27,6 +28,7 @@
 
   <ChatTranscript bottomOffset={composerHeight} />
   <ChatComposer bind:height={composerHeight} />
+  <CurtainCall />
 </div>
 
 <style>

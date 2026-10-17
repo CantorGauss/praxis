@@ -66,6 +66,13 @@ import { setUiLocale, t } from "../i18n/ui.svelte";
 import { chooseSpeakers } from "../services/director";
 import { detectStagnation, linesSinceNarration } from "../services/stagnation";
 import { inventSceneTwist, TWIST_COOLDOWN_LINES } from "../services/twist";
+import type { TwistTheme } from "../i18n/prompts";
+import {
+  MIN_LINES_FOR_REVIEW,
+  sceneStats,
+  writeReview,
+  type SceneReview,
+} from "../services/review";
 import { assessEmotionalReaction } from "../services/emotionAnalysis";
 import { newId } from "../services/db";
 import {
@@ -74,9 +81,15 @@ import {
   type ContextBudget,
 } from "../services/inference";
 import { createFrameBatcher } from "../services/frameBatcher";
+import { countAsides, publicText } from "../services/messageFormat";
 import { analyzeInteraction, collectProposals, coordinationContext } from "../services/coordination";
 
 export type View = "chat" | "new-chat" | "personas" | "settings";
+
+/** Probabilité d'inviter un personnage à l'aparté, à chaque réplique de groupe. */
+const ASIDE_NUDGE_CHANCE = 0.18;
+/** Répliques récentes sans aparté exigées avant une nouvelle invitation. */
+const ASIDE_NUDGE_SPACING = 6;
 
 /**
  * Où en est le tour de parole. Une conversation à voix haute a des silences
@@ -181,12 +194,15 @@ class AppState {
    * jouées dès que le verrou du tour est libéré, au lieu d'être ignorées.
    */
   pendingSceneActions = $state<
-    Array<{
-      kind: "enter" | "leave";
-      personaId: string;
-      description: string;
-      react: boolean;
-    }>
+    Array<
+      | {
+          kind: "enter" | "leave";
+          personaId: string;
+          description: string;
+          react: boolean;
+        }
+      | { kind: "twist"; theme: TwistTheme }
+    >
   >([]);
   private flushingSceneAction = false;
 
@@ -208,6 +224,24 @@ class AppState {
   idlePaused = $state(false);
   /** L'utilisateur laisse explicitement les personnages échanger sans limite de tours. */
   userSilent = $state(false);
+
+  /** Le rideau est baissé : la critique et les Molières sont à l'écran. */
+  curtainCallOpen = $state(false);
+  /** La pause posée par le rideau, levée avec lui ; une pause choisie reste. */
+  private curtainPausedScene = false;
+  /** Une reprise après silence était programmée au baisser du rideau. */
+  private curtainHeldIdleTimer = false;
+  /**
+   * Critique du lendemain, par conversation, le temps de la session.
+   * `lineCount` : nombre de répliques au moment de l'écrire — la scène qui a
+   * avancé depuis mérite une nouvelle critique.
+   */
+  reviews = $state<
+    Record<
+      string,
+      { status: "loading" | "ready" | "failed"; review: SceneReview | null; lineCount: number }
+    >
+  >({});
 
   temperatureOverride = $state<number | null>(null);
   errorBanner = $state<string | null>(null);
@@ -408,6 +442,20 @@ class AppState {
     return this.participants.map((p) => ({ id: p.id, name: p.name }));
   }
 
+  /**
+   * Toute la distribution de la soirée : les présents, puis ceux qui ont parlé
+   * avant de sortir. C'est elle qui concourt aux Molières.
+   */
+  get sceneCast(): Participant[] {
+    const cast = [...this.roster];
+    for (const m of this.messages) {
+      if (m.kind !== "speech" || m.role !== "assistant" || !m.personaId) continue;
+      if (cast.some((p) => p.id === m.personaId)) continue;
+      cast.push({ id: m.personaId, name: this.labelFor(m) });
+    }
+    return cast;
+  }
+
   /** Nom affiché du locuteur d'un message, même si la persona a disparu. */
   labelFor = (message: Message): string => {
     if (message.kind === "narration") return t().app.narrationSpeaker;
@@ -591,6 +639,8 @@ class AppState {
     // doit pas suivre l'utilisateur dans une autre conversation.
     this.queuedMessage = null;
     this.pendingSceneActions = [];
+    this.curtainCallOpen = false;
+    this.curtainPausedScene = false;
     if (this.streaming) await this.cancelGeneration();
     this.currentConversationId = id;
     this.interactionAttempts.clear();
@@ -616,6 +666,8 @@ class AppState {
     this.cancelIdleChatter();
     this.queuedMessage = null;
     this.pendingSceneActions = [];
+    this.curtainCallOpen = false;
+    this.curtainPausedScene = false;
     this.currentConversationId = null;
     this.interactionAttempts.clear();
     this.messages = [];
@@ -949,7 +1001,9 @@ class AppState {
     this.flushingSceneAction = true;
     this.pendingSceneActions = this.pendingSceneActions.slice(1);
     try {
-      if (pending.kind === "enter") {
+      if (pending.kind === "twist") {
+        await this.triggerTwist(pending.theme);
+      } else if (pending.kind === "enter") {
         await this.enterScene(
           pending.personaId,
           pending.description,
@@ -1136,6 +1190,92 @@ class AppState {
   }
 
   // -------------------------------------------------------------------------
+  // Baisser le rideau : critique et Molières
+  // -------------------------------------------------------------------------
+
+  /**
+   * Fige la scène le temps de lire la presse, et commande une critique si la
+   * pièce a avancé depuis la dernière.
+   */
+  lowerCurtain(): void {
+    const conv = this.currentConversation;
+    if (!conv) return;
+    this.curtainPausedScene = false;
+    this.curtainHeldIdleTimer = false;
+    if (this.userSilent) {
+      this.reclaimFloor();
+    } else if (!this.idlePaused) {
+      this.idlePaused = true;
+      this.curtainPausedScene = true;
+      this.curtainHeldIdleTimer = this.idleTimer !== null;
+      this.cancelIdleChatter();
+    }
+    this.curtainCallOpen = true;
+    const existing = this.reviews[conv.id];
+    const lines = sceneStats(this.messages).lines;
+    if (!existing || (existing.status !== "loading" && existing.lineCount !== lines)) {
+      void this.requestReview();
+    }
+  }
+
+  /**
+   * Relève le rideau et rend la scène dans l'état où il l'avait trouvée : la
+   * pause qu'il a posée est levée, et le compte à rebours ne reprend que s'il
+   * courait déjà — rouvrir une scène pour lire la presse ne doit pas la relancer.
+   */
+  raiseCurtain(): void {
+    this.curtainCallOpen = false;
+    if (this.curtainPausedScene && this.idlePaused) {
+      this.idlePaused = false;
+      if (this.curtainHeldIdleTimer) this.scheduleIdleChatter();
+    }
+    this.curtainPausedScene = false;
+    this.curtainHeldIdleTimer = false;
+  }
+
+  async requestReview(): Promise<void> {
+    const conv = this.currentConversation;
+    if (!conv) return;
+    const lineCount = sceneStats(this.messages).lines;
+    if (lineCount < MIN_LINES_FOR_REVIEW) return;
+    const previous = this.reviews[conv.id]?.review ?? null;
+    const settle = (status: "ready" | "failed", review: SceneReview | null) => {
+      this.reviews = { ...this.reviews, [conv.id]: { status, review, lineCount } };
+    };
+    const target = this.target;
+    const modelId = this.activeModelId;
+    if (!target || !modelId) {
+      settle("failed", previous);
+      return;
+    }
+    this.reviews = {
+      ...this.reviews,
+      [conv.id]: { status: "loading", review: previous, lineCount },
+    };
+    const castIds = this.sceneCast.map((p) => p.id);
+    const profile = await profileRepo.get(modelId);
+    const review = await writeReview({
+      connection: target,
+      modelId,
+      cast: castIds.map((id) => {
+        const persona = this.personaById(id);
+        return {
+          name: persona?.name ?? this.sceneCast.find((p) => p.id === id)?.name ?? "?",
+          description: persona?.description ?? null,
+        };
+      }),
+      sceneDescription: conv.sceneDescription,
+      summary: conv.summary,
+      messages: this.messages,
+      label: this.labelFor,
+      userName: this.userName,
+      extraParameters: profile.customParameters,
+      pack: this.pack,
+    });
+    settle(review ? "ready" : "failed", review ?? previous);
+  }
+
+  // -------------------------------------------------------------------------
   // Reprise automatique après un silence
   // -------------------------------------------------------------------------
 
@@ -1286,15 +1426,33 @@ class AppState {
     ) {
       return false;
     }
+    const text = await this.inventTwist(conversationId, null);
+    if (
+      !text ||
+      this.turnAborted ||
+      this.currentConversationId !== conversationId ||
+      this.queuedMessage ||
+      this.pendingSceneActions.length
+    ) {
+      return false;
+    }
+    return (await this.addNarration(conversationId, text, "assistant")) !== null;
+  }
+
+  /** Demande un imprévu au modèle ; null s'il n'a rien d'utilisable. */
+  private async inventTwist(
+    conversationId: string,
+    theme: TwistTheme | null,
+  ): Promise<string | null> {
     const target = this.target;
     const modelId = this.activeModelId;
     const conv = this.conversationById(conversationId);
-    if (!target || !modelId || !conv) return false;
+    if (!target || !modelId || !conv) return null;
 
     this.directing = true;
     try {
       const profile = await profileRepo.get(modelId);
-      const text = await inventSceneTwist({
+      return await inventSceneTwist({
         connection: target,
         modelId,
         participants: this.participants.map((p) => ({
@@ -1308,20 +1466,63 @@ class AppState {
         userName: this.userName,
         extraParameters: profile.customParameters,
         pack: this.pack,
+        theme,
       });
-      if (
-        !text ||
-        this.turnAborted ||
-        this.currentConversationId !== conversationId ||
-        this.queuedMessage ||
-        this.pendingSceneActions.length
-      ) {
-        return false;
-      }
-      return (await this.addNarration(conversationId, text, "assistant")) !== null;
     } finally {
       this.directing = false;
     }
+  }
+
+  /**
+   * Imprévu réclamé par l'utilisateur (🎲). Contrairement à l'imprévu
+   * spontané, il n'attend ni l'enlisement ni le délai entre deux didascalies :
+   * c'est une demande, pas une suggestion. Pendant qu'un personnage parle, il
+   * est mis en file comme une entrée en scène, sans couper le mode écoute.
+   */
+  async triggerTwist(theme: TwistTheme): Promise<void> {
+    const conv = this.currentConversation;
+    if (!conv || this.participantIds.length === 0) return;
+    if (!this.target) {
+      this.errorBanner = t().app.noConnection;
+      return;
+    }
+    if (!this.activeModelId) {
+      this.errorBanner = t().app.noModel;
+      return;
+    }
+    if (!this.userHasFloor) {
+      if (this.pendingSceneActions.some((action) => action.kind === "twist")) return;
+      this.pendingSceneActions = [...this.pendingSceneActions, { kind: "twist", theme }];
+      this.notice = t().app.twistWillHappen;
+      return;
+    }
+    this.cancelIdleChatter();
+    this.errorBanner = null;
+    await this.withTurn(async () => {
+      const text = await this.inventTwist(conv.id, theme);
+      if (this.currentConversationId !== conv.id) return;
+      if (!text) {
+        this.notice = t().app.twistFailed;
+        return;
+      }
+      await this.addNarration(conv.id, text, "assistant");
+      await this.titleFromFirstMessage(conv, text);
+      // Un imprévu réclamé appelle une réaction : le metteur en scène choisit
+      // qui réagit, mais n'a pas le droit de laisser la scène muette.
+      const fallback = planContinuation(this.roster, this.lastSpeakerId());
+      const chosen = await this.decideSpeakers(fallback, {
+        afterUserMessage: true,
+        consultModel: true,
+      });
+      const first = chosen[0] ?? fallback[0];
+      if (!first || this.turnAborted) return;
+      await this.playTurn(
+        conv.id,
+        [first],
+        () => describeSceneEvent(this.userName, this.pack),
+        true,
+      );
+    });
   }
 
   /** Consigne de destinataire à donner à chaque locuteur du tour. */
@@ -1509,6 +1710,8 @@ class AppState {
     const modelId = this.activeModelId;
     if (!message || message.interaction || !target || !modelId ||
       message.status !== "complete" || message.kind !== "speech") return;
+    // Un aparté seul n'a été entendu de personne : il n'engage à rien.
+    if (!publicText(message.content).trim()) return;
     const attempt = `${message.id}:${message.content}`;
     if (this.interactionAttempts.has(attempt)) return;
     this.interactionAttempts.add(attempt);
@@ -1559,8 +1762,26 @@ class AppState {
 
     const others = this.participants.filter((p) => p.id !== speaker.id);
     const otherNames = others.map((p) => p.name);
+    // Ceux qui ont parlé puis sont sortis : leurs répliques restent dans
+    // l'historique. Sans les nommer comme absents, le locuteur continue de
+    // leur répondre — et s'il reste seul, leurs lignes passeraient même pour
+    // les siennes.
+    const departedNames = [
+      ...new Set(
+        this.messages
+          .filter(
+            (m) =>
+              m.role === "assistant" &&
+              m.kind === "speech" &&
+              m.personaId &&
+              m.personaId !== speaker.id &&
+              !this.participantIds.includes(m.personaId),
+          )
+          .map((m) => this.labelFor(m)),
+      ),
+    ].filter((name) => name !== speaker.name && !otherNames.includes(name));
     const scene: SceneInput | null =
-      otherNames.length > 0
+      otherNames.length > 0 || departedNames.length > 0
         ? {
             speakerId: speaker.id,
             speakerName: speaker.name,
@@ -1574,6 +1795,7 @@ class AppState {
               gender: p.gender,
               description: p.description,
             })),
+            departedNames,
             userGender: this.settings.userGender,
             label: this.labelFor,
             addresseeLabel: this.addresseeLabelFor(speaker.id),
@@ -1637,6 +1859,7 @@ class AppState {
           : null,
         userName: this.userName,
         userSilentTurns: this.consecutiveAiTurns,
+        departedNames,
       },
       this.pack,
     );
@@ -1657,6 +1880,13 @@ class AppState {
           ])
         : null;
 
+    // De temps en temps, une invitation à l'aparté — jamais deux de suite :
+    // un aparté par scène qui revient en boucle n'amuse plus personne.
+    const asideNudge =
+      Boolean(scene && otherNames.length > 0) &&
+      !this.messages.slice(-ASIDE_NUDGE_SPACING).some((m) => countAsides(m.content) > 0) &&
+      Math.random() < ASIDE_NUDGE_CHANCE;
+
     const contextTokens = this.contextBudgetFor(modelId, profile.contextWindow).tokens;
     // La longueur choisie dans la fiche du personnage est une vraie limite,
     // jamais un simple indice visuel. Elle réserve la même place dans le prompt
@@ -1672,6 +1902,7 @@ class AppState {
       summary: conv.summary,
       coordination: scene ? this.coordination : undefined,
       stagnation,
+      asideNudge,
       recentMessages: recent,
       sceneDescription: conv.sceneDescription,
       contextTokens,
@@ -1753,11 +1984,16 @@ class AppState {
         streamUpdates.flush();
         const raw = rawContent;
         const content = scene
-          ? cleanSpeakerReply(raw, speaker.name, otherNames, this.userName)
+          ? cleanSpeakerReply(
+              raw,
+              speaker.name,
+              [...otherNames, ...departedNames],
+              this.userName,
+            )
           : raw;
         // À qui le personnage vient de parler, figé une fois pour toutes.
         const addressee = scene
-          ? (detectAddressee(content, [
+          ? (detectAddressee(publicText(content), [
               { id: USER_ADDRESSEE, name: this.userName },
               ...others.map((p) => ({ id: p.id, name: p.name })),
             ])?.id ?? null)

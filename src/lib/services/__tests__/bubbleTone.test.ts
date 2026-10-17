@@ -38,7 +38,7 @@ describe("bubbleTone", () => {
     expect(bubbleTone("*chuchote* Viens par ici.", null).delivery).toBe("whisper");
     expect(bubbleTone("*hurle* Sortez !", null).delivery).toBe("shout");
     expect(bubbleTone("*éclate de rire* Non, sérieux ?", null).delivery).toBe("laugh");
-    expect(bubbleTone("*laughs softly* Fine.", null).delivery).toBe("whisper");
+    expect(bubbleTone("*laughs softly* Fine.", null).delivery).toBe("laugh");
     expect(bubbleTone("*frissonne* Il fait froid.", null).delivery).toBe("tremble");
     expect(bubbleTone("*dit à voix basse* Attention.", null).delivery).toBe("whisper");
   });
@@ -54,6 +54,19 @@ describe("bubbleTone", () => {
 
   it("ne confond pas « sourit » avec un rire", () => {
     expect(bubbleTone("*sourit* Bien sûr.", null).delivery).toBeNull();
+    expect(bubbleTone("*reprend son rituel* Bon.", null).delivery).toBeNull();
+  });
+
+  it("ne prend pas un souffle court pour un chuchotement", () => {
+    expect(bubbleTone("*Je m'arrête, le souffle court.* Alors oui, on rentre.", null).delivery).toBeNull();
+  });
+
+  it("ne lit que la didascalie d'ouverture", () => {
+    const tirade =
+      "*Je me tourne vers Jeff, les poings serrés.* Tu délires ?\n\n" +
+      "*Je m'arrête.* Mais toi — *ma voix se fait plus basse, je murmure* — on aura un problème.";
+    expect(bubbleTone(tirade, null).delivery).toBeNull();
+    expect(bubbleTone("*murmure* *se penche* Viens.", null).delivery).toBe("whisper");
   });
 
   it("repère les cris et les rires dans le texte", () => {

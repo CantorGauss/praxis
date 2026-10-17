@@ -285,6 +285,11 @@ export const enUi = {
     sceneEventHint: "A noise, an arrival, an incident…",
     insertAction: "Insert an action",
     insertActionHint: "Adds *asterisks*",
+    insertAside: "Slip in an aside",
+    insertAsideHint: "Said to the audience: no character hears it",
+    asidePrefix: "aside: ",
+    aside: "aside",
+    asideHint: "Said to the audience: nobody in the scene hears it",
     to: "To",
     whoShouldAnswer: "Who should answer",
     auto: "Auto",
@@ -318,6 +323,72 @@ export const enUi = {
     theCharacter: "The character",
     floorHintAutonomous: "type: you take the floor back after this line",
     floorHintDeferred: "you can type: your message goes out at the end of the turn",
+  },
+
+  curtainCall: {
+    button: "Curtain",
+    buttonTitle: "Bring the curtain down: the evening's review and awards",
+    kicker: "The morning after",
+    title: "The reviews are in",
+    close: "Raise the curtain",
+    defaultPaper: "The Backstage Gazette",
+    starsAria: (n: number) => `${n} star${n > 1 ? "s" : ""} out of 5`,
+    reviewLoading: "The critic is scribbling in their notebook…",
+    reviewFailed: "The critic slipped out before the end.",
+    retry: "Ask for a review again",
+    rewrite: "Another review",
+    tooEarly: (min: number) =>
+      `Too early for a review: play at least ${min} lines, the critic ` +
+      `didn't stay for so little.`,
+    awardsTitle: "Tonight's awards",
+    noAwards: "No winners yet: the evening has only just begun.",
+    director: "The director",
+    stats: (lines: number, narrations: number, twists: number, asides: number) =>
+      [
+        `${lines} line${lines > 1 ? "s" : ""}`,
+        narrations ? `${narrations} stage direction${narrations > 1 ? "s" : ""}` : "",
+        twists ? `${twists} twist${twists > 1 ? "s" : ""}` : "",
+        asides ? `${asides} aside${asides > 1 ? "s" : ""}` : "",
+      ].filter(Boolean).join(" · "),
+    awards: {
+      chatterbox: { icon: "🗣️", title: "Motor Mouth Award", detail: (n: number) => `${n} words on the clock` },
+      volcano: { icon: "🌋", title: "Volcano Award", detail: (n: number) => `anger at ${n}%` },
+      drama: { icon: "🎭", title: "Melodrama Award", detail: (n: number) => `emotion at ${n}%` },
+      sunshine: { icon: "☀️", title: "Ray of Sunshine Award", detail: (n: number) => `joy at ${n}%` },
+      diplomat: { icon: "🕊️", title: "Diplomacy Award", detail: (n: number) => `${n} agreements given` },
+      contrarian: { icon: "✋", title: "Devil's Advocate Award", detail: (n: number) => `${n} objections` },
+      yesBut: {
+        icon: "🤏",
+        title: "\"Yes, but…\" Award",
+        detail: (n: number) => `${n} conditional agreement${n > 1 ? "s" : ""}`,
+      },
+      curious: { icon: "🔍", title: "Curiosity Award", detail: (n: number) => `${n} lines asking questions` },
+      whisperer: {
+        icon: "🤫",
+        title: "Aside Award",
+        detail: (n: number) => `${n} confidence${n > 1 ? "s" : ""} to the audience`,
+      },
+      wallflower: {
+        icon: "🪴",
+        title: "Potted Plant Award",
+        detail: (n: number) => (n === 0 ? "not a word all evening" : `${n} line${n > 1 ? "s" : ""}, all told`),
+      },
+      twist: { icon: "✦", title: "Coup de Théâtre Award", detail: (_n: number) => "goes to the twist" },
+    },
+  },
+
+  twist: {
+    button: "Twist",
+    title: "Make something happen in the scene",
+    menuTitle: "What kind of twist?",
+    themes: {
+      surprise: { icon: "🎲", label: "Surprise", hint: "Director's choice" },
+      catastrophe: { icon: "🔥", label: "Disaster", hint: "Things break, spill, panic" },
+      romance: { icon: "💌", label: "Romance", hint: "A love note, a flustered glance" },
+      absurd: { icon: "🦙", label: "Absurd", hint: "The improbable, with a straight face" },
+      mystery: { icon: "🕵️", label: "Mystery", hint: "A clue nobody can explain" },
+      revelation: { icon: "💥", label: "Coup de théâtre", hint: "A secret comes out" },
+    },
   },
 
   coordination: {
@@ -598,6 +669,8 @@ export const enUi = {
   app: {
     narrationSpeaker: "Scene",
     generatedTwist: "Twist written by the model to get the scene moving",
+    twistWillHappen: "The twist will happen as soon as the current line ends.",
+    twistFailed: "The director came up empty this time. Roll the die again!",
     personaWillEnter: (name: string) =>
       `${name} will enter at the end of the current turn.`,
     personaWillLeave: (name: string) =>

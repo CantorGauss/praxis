@@ -1,6 +1,7 @@
 import type { Gender, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import type { ChatMessage } from "./llmClient";
+import { publicText } from "./messageFormat";
 
 /**
  * Conversations à plusieurs personnages.
@@ -117,12 +118,16 @@ export function renderTranscript(
       flush();
       rendered.push({ role: "assistant", content: message.content });
     } else {
+      // Les apartés des autres ne sont pas entendus : seul leur auteur s'en
+      // souvient. Une réplique faite d'un seul aparté n'existe pas pour lui.
+      const heard = publicText(message.content);
+      if (!heard.trim()) continue;
       const name = label(message);
       speakers.add(name);
       // Le destinataire est annoté : sans lui, le « tu » d'une réplique
       // transmise n'a pas de référent, et celui qui la lit se croit visé.
       const to = addressee?.(message) ?? null;
-      buffer.push(pack.scene.transcriptLine(name, to, message.content));
+      buffer.push(pack.scene.transcriptLine(name, to, heard));
     }
   }
   flush();
@@ -139,6 +144,8 @@ export type SceneBlockOptions = {
     /** Une ligne issue de la fiche, distincte du prompt de personnalité. */
     description?: string | null;
   }[];
+  /** Personnages qui ont parlé plus tôt mais ne sont plus en scène. */
+  departed?: string[];
   userName?: string;
   userGender?: SceneGender;
   /** À qui s'adresse le dernier message ; calculé par le directeur. */
@@ -159,6 +166,7 @@ export function buildSceneBlock(
     speakerName: options.speakerName,
     speakerGender: options.speakerGender ?? "neutral",
     others: options.others,
+    departed: options.departed ?? [],
     userName: options.userName ?? pack.scene.userLabel,
     userGender: options.userGender ?? "neutral",
   });
@@ -401,16 +409,22 @@ export function describeLastTurn(
     userName: string;
     /** Répliques écoulées depuis le dernier message de l'utilisateur. */
     userSilentTurns: number;
+    /** Personnages sortis : la dernière réplique peut venir de l'un d'eux. */
+    departedNames?: string[];
   },
   pack: PromptPack = DEFAULT_PROMPT_PACK,
 ): string {
   const { lastSpeakerName, lastAddresseeName, userName, userSilentTurns } = options;
+  const departedNames = options.departedNames ?? [];
   const lines: string[] = [];
   if (lastSpeakerName) {
     lines.push(pack.scene.lastTurnSpeaker(lastSpeakerName, lastAddresseeName));
   }
   if (userSilentTurns > 0) {
     lines.push(pack.scene.lastTurnUserSilent(userName, userSilentTurns));
+  }
+  if (departedNames.length > 0) {
+    lines.push(pack.scene.departedReminder(departedNames));
   }
   return lines.join("\n");
 }

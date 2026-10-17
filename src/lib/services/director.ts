@@ -1,6 +1,7 @@
 import type { ConnectionTarget, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
+import { publicText } from "./messageFormat";
 import type { MessageLabeller, Participant } from "./scene";
 
 /**
@@ -100,11 +101,11 @@ export async function chooseSpeakers(input: DirectorInput): Promise<string[] | n
 
   const transcript = input.recentMessages
     .slice(-DIRECTOR_CONTEXT_MESSAGES)
-    .filter((m) => m.content.trim())
+    .filter((m) => publicText(m.content).trim())
     .map((m) =>
       m.kind === "narration"
         ? d.narrationLine(m.content)
-        : d.transcriptLine(input.label(m), m.content),
+        : d.transcriptLine(input.label(m), publicText(m.content)),
     )
     .join("\n");
 

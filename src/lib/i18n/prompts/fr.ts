@@ -64,7 +64,7 @@ export const frPrompts: PromptPack = {
     genderClause,
     selfGenderClause,
 
-    sceneBlock: ({ speakerName, speakerGender, others, userName, userGender }) => {
+    sceneBlock: ({ speakerName, speakerGender, others, departed = [], userName, userGender }) => {
       const otherNames = others.map((o) => o.name);
       const roster = [
         `- ${userName} — la personne humaine qui utilise l'application. ` +
@@ -81,6 +81,11 @@ export const frPrompts: PromptPack = {
           },
         ),
         `- ${speakerName} — toi. ${selfGenderClause(speakerGender)}`,
+        ...departed.map(
+          (name) =>
+            `- ${name} — a quitté la scène. Ses répliques passées restent dans ` +
+            `l'historique, mais ${name} n'est plus là et ne t'entend plus.`,
+        ),
       ].join("\n");
 
       return [
@@ -139,6 +144,11 @@ export const frPrompts: PromptPack = {
       `${userName} n'a rien dit depuis ${turns} réplique${turns > 1 ? "s" : ""} : ` +
       `n'attribue pas à ${userName} des propos tenus par un personnage, et ne ` +
       `lui réponds pas comme s'il venait de parler.`,
+    departedReminder: (names) =>
+      `${enumerate(names)} ${names.length > 1 ? "ont" : "a"} quitté la scène et ` +
+      `n'${names.length > 1 ? "entendent" : "entend"} plus rien : ne t'adresse ` +
+      `plus à ${names.length > 1 ? "eux" : enumerate(names)}, ne ${names.length > 1 ? "leur" : "lui"} ` +
+      `réponds pas. Parle à ceux qui sont encore là.`,
 
     sceneEvent: (userName) =>
       `Quelque chose vient de se produire dans la pièce — vois la ligne ` +
@@ -225,6 +235,23 @@ export const frPrompts: PromptPack = {
         `comme si quelqu'un te l'avait dite.`
       );
     },
+
+    asides: () =>
+      `[APARTÉS]\n` +
+      `Comme au théâtre, tu peux glisser un aparté : une phrase dite au public, ` +
+      `que personne dans la scène n'entend. Écris-le exactement sous cette ` +
+      `forme, entre parenthèses : « (aparté : je n'ai jamais aimé ce gâteau) ».\n` +
+      `C'est la place d'une pensée inavouable, d'une moquerie, d'un aveu, d'un ` +
+      `plan secret ou d'un commentaire ironique sur les autres — jamais d'une ` +
+      `redite de ta réplique. Au plus un aparté court par réplique, et la ` +
+      `plupart de tes répliques n'en ont aucun. Les autres ne réagissent pas ` +
+      `à tes apartés, et tu n'entends pas les leurs. Ne trahis pas ce que tu ` +
+      `as dit en aparté dans ta réplique publique.`,
+
+    asideNudge: () =>
+      `[APARTÉ]\nSi ton personnage pense quelque chose qu'il ne dirait jamais ` +
+      `tout haut, c'est le moment : glisse un court « (aparté : …) » au public, ` +
+      `en plus de ta réplique.`,
 
     conversationSummary: (summary) => `[RÉSUMÉ DE LA CONVERSATION]\n${summary}`,
 
@@ -341,13 +368,58 @@ export const frPrompts: PromptPack = {
       "- donne aux personnages quelque chose à quoi réagir, à décider ou à " +
       "débattre.\n" +
       "Réponds uniquement par la didascalie, sans préfixe, sans guillemets ni commentaire.",
-    user: ({ situation, summary, roster, transcript }) =>
+    user: ({ situation, summary, roster, transcript, theme }) =>
       (situation ? `Situation de départ :\n${situation}\n\n` : "") +
       (summary ? `Ce qui s'est passé jusqu'ici :\n${summary}\n\n` : "") +
       `Personnages présents :\n${roster}\n\n` +
       `Dernières répliques :\n${transcript}\n\n` +
+      (theme ? `Le public réclame un imprévu. Couleur demandée : ${theme}\n\n` : "") +
       "Écris maintenant la didascalie.",
+    themes: {
+      surprise:
+        "libre — surprends, en restant dans le ton de la scène.",
+      catastrophe:
+        "une petite catastrophe. Quelque chose casse, déborde, prend feu ou " +
+        "tourne mal : de quoi semer la panique, sans blesser personne gravement.",
+      romance:
+        "un parfum de romance. Un billet doux, un cadeau anonyme, un regard " +
+        "surpris, un geste trop tendre : de quoi troubler quelqu'un.",
+      absurd:
+        "franchement absurde. Ici, l'invraisemblable est permis : un événement " +
+        "comique et improbable (un animal inattendu, un objet qui n'a rien à " +
+        "faire là, une coïncidence ridicule), décrit avec le plus grand sérieux.",
+      mystery:
+        "un mystère. Un indice, une lettre sans signature, un objet déplacé, " +
+        "une disparition : quelque chose que personne ne sait expliquer.",
+      revelation:
+        "un coup de théâtre. Un secret éclate, une preuve surgit, quelqu'un " +
+        "est démasqué : un fait qui renverse la situation.",
+    },
     stripPrefixes: ["scène", "didascalie", "imprévu", "événement"],
+  },
+
+  review: {
+    system: ({ userName }) =>
+      "Tu es critique de théâtre : spirituel, un brin vachard, jamais méchant. " +
+      `Tu viens d'assister à une pièce improvisée entre des personnages et ${userName}, ` +
+      "qui y tient son propre rôle. Écris la critique qui paraîtra demain matin.\n" +
+      "Règles :\n" +
+      "- appuie-toi sur des moments précis — une réplique, un geste, un imprévu " +
+      "marqué « Scène », un aparté — et nomme ceux qui les ont joués ;\n" +
+      "- un « (aparté : …) » est dit au public : tu l'as entendu, les autres " +
+      "personnages non. Tu peux t'en amuser ;\n" +
+      "- note la soirée de 1 à 5 étoiles, sans complaisance : 5 est rare ;\n" +
+      "- invente le nom de ton journal (un titre de presse fictif et drôle) et " +
+      "un titre accrocheur ;\n" +
+      "- la critique tient en trois à cinq phrases, au présent, pleines d'esprit.\n" +
+      "Réponds UNIQUEMENT en JSON, sans commentaire : " +
+      '{"newspaper":"…","headline":"…","stars":3,"review":"…"}',
+    user: ({ situation, summary, roster, transcript }) =>
+      (situation ? `Situation de départ :\n${situation}\n\n` : "") +
+      (summary ? `Début de la pièce, en résumé :\n${summary}\n\n` : "") +
+      `Distribution :\n${roster}\n\n` +
+      `La pièce :\n${transcript}\n\n` +
+      "Rideau. Écris ta critique.",
   },
 
   coordination: {

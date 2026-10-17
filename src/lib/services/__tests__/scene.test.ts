@@ -89,6 +89,16 @@ describe("renderTranscript", () => {
     ]);
   });
 
+  it("ne transmet pas les apartés des autres, ni une réplique faite d'un seul aparté", () => {
+    const messages = [
+      msg(ANNA.id, "Bravo Marc. (aparté : quel désastre)"),
+      msg(null, "(aparté : je m'ennuie)"),
+    ];
+    expect(renderTranscript(messages, MARC.id, label, undefined, FR)).toEqual([
+      { role: "user", content: "Anna : Bravo Marc." },
+    ]);
+  });
+
   it("ignore les messages vides, y compris celui en cours de rédaction", () => {
     const messages = [
       msg(null, "Question"),
@@ -237,6 +247,32 @@ describe("describeLastTurn", () => {
     );
     expect(text).toContain("The last line is Megan's.");
     expect(text).toContain("Jeff has said nothing for 4 lines");
+  });
+
+  it("rappelle qu'un personnage sorti n'est plus là", () => {
+    const texte = describeLastTurn(
+      {
+        lastSpeakerName: "Marc",
+        lastAddresseeName: "toi",
+        userName: "Jeff",
+        userSilentTurns: 0,
+        departedNames: ["Marc"],
+      },
+      FR,
+    );
+    expect(texte).toContain("Marc a quitté la scène");
+    expect(texte).toContain("ne lui réponds pas");
+    const text = describeLastTurn(
+      {
+        lastSpeakerName: null,
+        lastAddresseeName: null,
+        userName: "Jeff",
+        userSilentTurns: 0,
+        departedNames: ["Marc", "Léa"],
+      },
+      enPrompts,
+    );
+    expect(text).toContain("Marc and Léa have left the scene");
   });
 
   it("ne dit rien quand personne n'a encore parlé", () => {

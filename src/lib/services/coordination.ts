@@ -4,6 +4,7 @@ import type {
 import { USER_ADDRESSEE } from "../types";
 import type { PromptPack } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
+import { publicText } from "./messageFormat";
 import type { Participant } from "./scene";
 
 const INTENTS: DialogueIntent[] = [
@@ -158,8 +159,8 @@ export async function analyzeInteraction(input: InteractionInput): Promise<Messa
     const data = {
       participants,
       context: coordinationContext(history, participants, pack, Math.min(4800, contextTokens)),
-      recentMessages: history.filter((m) => m.status === "complete").slice(-8).map((m) => ({ id: m.id, speakerId: messageActor(m), addresseeId: m.addressee, content: m.content.slice(-2000) })),
-      message: { id: message.id, speakerId: actor, addresseeId: message.addressee, content: message.content },
+      recentMessages: history.filter((m) => m.status === "complete").slice(-8).map((m) => ({ id: m.id, speakerId: messageActor(m), addresseeId: m.addressee, content: publicText(m.content).slice(-2000) })),
+      message: { id: message.id, speakerId: actor, addresseeId: message.addressee, content: publicText(message.content) },
     };
     // Keep the complete source utterance: chopping its ending could remove a
     // condition or negation. Omit analysis when even that cannot fit safely.

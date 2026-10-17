@@ -66,6 +66,31 @@ describe("inventSceneTwist", () => {
     expect(sent).toContain("ne fais jamais agir ni parler Jeff");
   });
 
+  it("transmet la couleur demandée, et seulement quand il y en a une", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue("Un lama traverse le salon.");
+    await inventSceneTwist({ ...input, theme: "absurd" });
+    await inventSceneTwist(input);
+    const [themed, plain] = chat.mock.calls.map((call) => JSON.stringify(call[1]));
+    expect(themed).toContain("Le public réclame un imprévu");
+    expect(themed).toContain("l'invraisemblable est permis");
+    expect(plain).not.toContain("Le public réclame un imprévu");
+  });
+
+  it("ne transmet pas les apartés à l'auteur des imprévus", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue("On sonne.");
+    await inventSceneTwist({
+      ...input,
+      recentMessages: [{
+        id: "m1", conversationId: "c1", role: "assistant", kind: "speech",
+        content: "Quel bon rôti. (aparté : il est brûlé)", status: "complete",
+        createdAt: "2026-01-01T00:00:00Z", personaId: "p1", personaName: "Anna", addressee: null,
+      }],
+    });
+    const sent = JSON.stringify(chat.mock.calls[0][1]);
+    expect(sent).toContain("Quel bon rôti.");
+    expect(sent).not.toContain("brûlé");
+  });
+
   it("ne lève jamais : un échec revient à ne rien insérer", async () => {
     vi.spyOn(llm, "chatCompletion").mockRejectedValue(new Error("timeout"));
     expect(await inventSceneTwist(input)).toBeNull();

@@ -1,6 +1,7 @@
 import type { ConnectionTarget, Message } from "../types";
-import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
+import { DEFAULT_PROMPT_PACK, type PromptPack, type TwistTheme } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
+import { publicText } from "./messageFormat";
 import type { MessageLabeller } from "./scene";
 
 /**
@@ -82,7 +83,19 @@ export type TwistInput = {
   userName: string;
   extraParameters?: Record<string, unknown>;
   pack?: PromptPack;
+  /** Imprévu réclamé par l'utilisateur, avec sa couleur ; absent quand la scène s'enlise seule. */
+  theme?: TwistTheme | null;
 };
+
+/** Thèmes proposés dans l'interface, dans l'ordre d'affichage. */
+export const TWIST_THEMES: readonly TwistTheme[] = [
+  "surprise",
+  "catastrophe",
+  "romance",
+  "absurd",
+  "mystery",
+  "revelation",
+];
 
 /** Didascalie qui relance la scène, ou null si le modèle n'a rien d'utilisable. */
 export async function inventSceneTwist(input: TwistInput): Promise<string | null> {
@@ -92,11 +105,11 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
     .join("\n");
   const transcript = input.recentMessages
     .slice(-TWIST_CONTEXT_MESSAGES)
-    .filter((m) => m.content.trim())
+    .filter((m) => publicText(m.content).trim())
     .map((m) =>
       m.kind === "narration"
         ? pack.director.narrationLine(m.content)
-        : pack.director.transcriptLine(input.label(m), m.content),
+        : pack.director.transcriptLine(input.label(m), publicText(m.content)),
     )
     .join("\n");
 
@@ -118,6 +131,7 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
               summary: input.summary?.trim() || null,
               roster,
               transcript: transcript || pack.director.emptyTranscript,
+              theme: input.theme ? pack.twist.themes[input.theme] : null,
             }),
           },
         ],
