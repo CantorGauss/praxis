@@ -81,6 +81,16 @@ describe("assemblePrompt", () => {
     expect(assemblePrompt(baseInput({ coordination: "x".repeat(40_000), contextTokens: 4096 })).error).not.toBeNull();
   });
 
+  it("prévient le personnage qui n'a pas assisté à toute la scène", () => {
+    expect(assemblePrompt(baseInput()).system).not.toContain("[CE QUE TU SAIS DE LA SCÈNE]");
+    expect(assemblePrompt(baseInput({ missedEarlier: true })).system).toContain(
+      "[CE QUE TU SAIS DE LA SCÈNE]",
+    );
+    expect(
+      assemblePrompt(baseInput({ missedEarlier: true, pack: enPrompts })).system,
+    ).toContain("[WHAT YOU KNOW OF THE SCENE]");
+  });
+
   it("assemble les sections dans l'ordre déterministe", () => {
     const input = baseInput({
       state: {
