@@ -1,4 +1,6 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import { sveltekit } from "@sveltejs/kit/vite";
 
 // @ts-expect-error process is a nodejs global
@@ -28,5 +30,11 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+  },
+
+  // Claude Code worktrees hold full copies of the repo: running their tests too
+  // would count every test twice.
+  test: {
+    exclude: [...configDefaults.exclude, ".claude/**"],
   },
 }));
