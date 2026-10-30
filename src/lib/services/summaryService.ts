@@ -2,7 +2,7 @@ import type { ConnectionTarget, Conversation, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
 import { publicText } from "./messageFormat";
-import { estimateTokens } from "./promptAssembler";
+import { estimateTokens, stripSummaryMarkers } from "./promptAssembler";
 import { conversationRepo } from "./repositories";
 import type { MessageLabeller } from "./scene";
 
@@ -39,19 +39,31 @@ export const MIN_SUMMARY_BATCH = 8;
 export const MAX_SUMMARY_BATCH = 24;
 
 /**
- * Le résumé est une mémoire de travail, pas une archive. Un plafond explicite
- * force le modèle à arbitrer entre les éléments au lieu de recopier indéfiniment
- * ce qui figurait déjà dans la version précédente.
+ * Ce qui sort de la fenêtre récente n'existe plus que dans le résumé. Les faits
+ * y sont donc cumulatifs : un plafond trop bas, comme les douze puces de la v4,
+ * oblige le modèle à sacrifier un fait acquis à chaque lot, et la scène se
+ * contredit quelques répliques plus loin. La limite ne sert qu'à contenir une
+ * très longue partie.
  */
-export const SUMMARY_MAX_BULLETS = 12;
-export const SUMMARY_MAX_OUTPUT_TOKENS = 900;
+export const SUMMARY_MAX_BULLETS = 22;
+export const SUMMARY_MAX_OUTPUT_TOKENS = 1800;
+
+/**
+ * Les modèles dépassent volontiers de deux ou trois puces. Couper dès la limite
+ * demandée sacrifierait les rubriques de fin : le filet ne sert qu'à l'emballement.
+ */
+const SUMMARY_BULLET_TOLERANCE = 6;
+
+/** Au-delà, le résumé pèse plus lourd que les répliques qu'il remplace. */
+const SUMMARY_FULL_CHARS = 4_000;
 
 const SUMMARY_BULLET = /^\s*(?:[-*•]|\d+[.)])\s+/;
 
 /**
  * Filet de sécurité pour les serveurs qui ignorent la limite demandée. Les
- * rubriques sont ordonnées de la plus utile à la plus périssable dans le
- * prompt ; couper la fin retire donc d'abord les événements récents en trop.
+ * faits établis ferment le résumé : ils sont les seuls à pouvoir s'emballer, et
+ * couper la fin préserve ainsi l'état courant et les questions ouvertes. En
+ * temps normal, `summaryIsFull` déclenche une condensation bien avant.
  */
 export function limitSummaryBullets(
   summary: string,
@@ -77,20 +89,34 @@ export function limitSummaryBullets(
 }
 
 /**
+ * Mémoire à condenser. Sans cet ordre explicite, un modèle reporte tous les
+ * faits et en ajoute : autour de 120 répliques, le résumé butait sur le plafond
+ * de puces puis sur celui des tokens, et plus aucune mise à jour n'aboutissait.
+ * La taille compte autant que les puces : un modèle en oublie parfois le format.
+ */
+export function summaryIsFull(summary: string | null): boolean {
+  if (!summary) return false;
+  const bullets = summary.split("\n").filter((line) => SUMMARY_BULLET.test(line));
+  return bullets.length >= SUMMARY_MAX_BULLETS || summary.length >= SUMMARY_FULL_CHARS;
+}
+
+/**
  * Marqueur applicatif : permet de reconstruire une fois les anciens résumés.
  *
  * Volontairement hors des packs de langue. Un marqueur traduit changerait à
  * chaque bascule de langue et ferait passer pour périmé un résumé qui ne l'est
  * pas. La v3 succède au marqueur français `[MÉMOIRE ACTIVE v2]` : les résumés
  * antérieurs sont réécrits une fois, ce qui est de toute façon nécessaire
- * puisque leurs rubriques étaient en français. La v4 introduit une vraie
- * politique d'expiration et force donc une nouvelle reconstruction des v3.
+ * puisque leurs rubriques étaient en français. La v4 introduisait une politique
+ * d'expiration : tout ce qu'un lot ne reconfirmait pas était effacé, y compris
+ * les faits acquis. La v5 rend les faits cumulatifs et force la reconstruction
+ * des v4 depuis les messages d'origine, seuls à contenir ce qui a été perdu.
  */
-export const SUMMARY_FORMAT_MARKER = "[ACTIVE MEMORY v4]";
+export const SUMMARY_FORMAT_MARKER = "[ACTIVE MEMORY v5]";
 
 /** Détecte notamment une dernière puce coupée en plein milieu. */
 export function summaryLooksTruncated(summary: string): boolean {
-  const body = summary.replace(SUMMARY_FORMAT_MARKER, "").trim();
+  const body = stripSummaryMarkers(summary);
   if (!body) return true;
   const lastLine =
     body
@@ -211,49 +237,63 @@ export async function updateSummary(
     .map((m) => pack.summary.messageLine(label(m), publicText(m.content)))
     .join("\n\n");
 
-  try {
-    const requestParameters = summaryRequestParameters(connection, extraParameters);
-    const text = await chatCompletion(connection, {
-      ...requestParameters,
-      model: modelId,
-      temperature: 0.2,
-      // Le plafond force une mémoire de travail compacte. Les paramètres
-      // ci-dessus coupent déjà le raisonnement caché, qui ne doit pas le manger.
-      max_tokens: SUMMARY_MAX_OUTPUT_TOKENS,
-      messages: [
-        {
-          role: "system",
-          content: pack.summary.system({ maxBullets: SUMMARY_MAX_BULLETS }),
-        },
-        {
-          role: "user",
-          content: pack.summary.user({
-            previousSummary:
-              !rebuilding && conversation.summary ? conversation.summary : null,
-            newMessages: block,
-          }),
-        },
-      ],
-    });
-    const body = limitSummaryBullets(text.trim());
-    if (!body) return { ok: false, reason: pack.summary.emptySummaryError };
-    if (summaryLooksTruncated(body)) {
-      return { ok: false, reason: pack.summary.truncatedSummaryError };
+  const previousSummary =
+    !rebuilding && conversation.summary ? stripSummaryMarkers(conversation.summary) : null;
+  // Un résumé trop long pour tenir dans la réponse échoue à chaque tentative
+  // identique : la seconde chance est donc une condensation.
+  const attempts = summaryIsFull(previousSummary)
+    ? [true]
+    : previousSummary
+      ? [false, true]
+      : [false];
+
+  let reason = pack.summary.emptySummaryError;
+  for (const compact of attempts) {
+    try {
+      const requestParameters = summaryRequestParameters(connection, extraParameters);
+      const text = await chatCompletion(connection, {
+        ...requestParameters,
+        model: modelId,
+        temperature: 0.2,
+        // Le plafond force une mémoire de travail compacte. Les paramètres
+        // ci-dessus coupent déjà le raisonnement caché, qui ne doit pas le manger.
+        max_tokens: SUMMARY_MAX_OUTPUT_TOKENS,
+        messages: [
+          {
+            role: "system",
+            content: pack.summary.system({ maxBullets: SUMMARY_MAX_BULLETS }),
+          },
+          {
+            role: "user",
+            content: pack.summary.user({ previousSummary, newMessages: block, compact }),
+          },
+        ],
+      });
+      const body = limitSummaryBullets(
+        stripSummaryMarkers(text),
+        SUMMARY_MAX_BULLETS + SUMMARY_BULLET_TOLERANCE,
+      );
+      if (!body) {
+        reason = pack.summary.emptySummaryError;
+        continue;
+      }
+      if (summaryLooksTruncated(body)) {
+        reason = pack.summary.truncatedSummaryError;
+        continue;
+      }
+      const updated: Conversation = {
+        ...conversation,
+        summary: `${SUMMARY_FORMAT_MARKER}\n${body}`,
+        summaryThroughMessageId: toSummarize[toSummarize.length - 1].id,
+      };
+      if (options.persist !== false) await conversationRepo.update(updated);
+      return { ok: true, conversation: updated };
+    } catch (e) {
+      // Jamais bloquant pour le chat : on remonte la cause, on ne la masque pas.
+      reason = String(e).replace(/^Error:\s*/, "");
     }
-    const summary = body.startsWith(SUMMARY_FORMAT_MARKER)
-      ? body
-      : `${SUMMARY_FORMAT_MARKER}\n${body}`;
-    const updated: Conversation = {
-      ...conversation,
-      summary,
-      summaryThroughMessageId: toSummarize[toSummarize.length - 1].id,
-    };
-    if (options.persist !== false) await conversationRepo.update(updated);
-    return { ok: true, conversation: updated };
-  } catch (e) {
-    // Jamais bloquant pour le chat : on remonte la cause, on ne la masque pas.
-    return { ok: false, reason: String(e).replace(/^Error:\s*/, "") };
   }
+  return { ok: false, reason };
 }
 
 /**

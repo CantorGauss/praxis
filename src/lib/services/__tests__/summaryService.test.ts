@@ -28,6 +28,7 @@ import {
   SUMMARY_FORMAT_MARKER,
   SUMMARY_MAX_BULLETS,
   SUMMARY_MAX_OUTPUT_TOKENS,
+  summaryIsFull,
   summaryRequestParameters,
   summaryLooksTruncated,
   summaryNeedsRefresh,
@@ -226,7 +227,99 @@ describe("updateSummary", () => {
     expect(outcome).toEqual({ ok: false, reason: null });
   });
 
-  it("borne la sortie et demande explicitement d'expirer les anciens éléments", async () => {
+  it("demande de condenser une mémoire pleine", async () => {
+    mocks.chatCompletion.mockResolvedValue("FAITS ÉTABLIS\n- Synthèse des faits anciens.");
+    const messages = Array.from(
+      { length: KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH },
+      (_, i) => message(String(i)),
+    );
+    const full = Array.from({ length: SUMMARY_MAX_BULLETS }, (_, i) => `- Fait ${i}.`).join("\n");
+
+    await updateSummary(
+      connection,
+      "m",
+      { ...conversation, summary: `${SUMMARY_FORMAT_MARKER}\nFAITS ÉTABLIS\n${full}` },
+      messages,
+    );
+
+    expect(mocks.chatCompletion).toHaveBeenCalledTimes(1);
+    expect(mocks.chatCompletion.mock.calls[0][1].messages[1].content).toContain(
+      "The memory is full",
+    );
+  });
+
+  it("repère aussi une mémoire pleine écrite sans puces", () => {
+    expect(summaryIsFull("Un fait sans puce.\n".repeat(300))).toBe(true);
+    expect(summaryIsFull("Un fait sans puce.")).toBe(false);
+    expect(summaryIsFull(null)).toBe(false);
+  });
+
+  it("retente en condensant quand le résumé dépasse la limite de tokens", async () => {
+    mocks.chatCompletion
+      .mockRejectedValueOnce(new Error("the model hit the token limit"))
+      .mockResolvedValueOnce("FAITS ÉTABLIS\n- Mémoire condensée.");
+    const messages = Array.from(
+      { length: KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH },
+      (_, i) => message(String(i)),
+    );
+
+    const outcome = await updateSummary(
+      connection,
+      "m",
+      { ...conversation, summary: `${SUMMARY_FORMAT_MARKER}\nFAITS ÉTABLIS\n- Un fait ancien.` },
+      messages,
+    );
+
+    expect(outcome.ok).toBe(true);
+    const [first, second] = mocks.chatCompletion.mock.calls.map((call) => call[1]);
+    expect(first.messages[1].content).not.toContain("The memory is full");
+    expect(second.messages[1].content).toContain("The memory is full");
+  });
+
+  it("garde l'état courant quand les faits s'emballent", async () => {
+    const bullets = Array.from({ length: 40 }, (_, i) => `- Fait ${i}.`).join("\n");
+    mocks.chatCompletion.mockResolvedValue(
+      `DERNIER ÉTAT CONNU\n- Inès est devant la porte.\n\nFAITS ÉTABLIS\n${bullets}`,
+    );
+    const messages = Array.from(
+      { length: KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH },
+      (_, i) => message(String(i)),
+    );
+
+    const outcome = await updateSummary(connection, "m", conversation, messages);
+
+    expect(outcome.ok && outcome.conversation.summary).toContain("Inès est devant la porte.");
+  });
+
+  it("ne laisse qu'un marqueur, même si le modèle en recopie ou en invente un", async () => {
+    mocks.chatCompletion.mockResolvedValue(
+      "[ACTIVE MEMORY v4]\n[ACTIVE MEMORY v6]\nFAITS ÉTABLIS\n- Jeff a ouvert l'enveloppe.",
+    );
+    const messages = Array.from(
+      { length: KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH },
+      (_, i) => message(String(i)),
+    );
+
+    const outcome = await updateSummary(
+      connection,
+      "m",
+      {
+        ...conversation,
+        summary: `${SUMMARY_FORMAT_MARKER}\nFAITS ÉTABLIS\n- Un fait ancien.`,
+        summaryThroughMessageId: null,
+      },
+      messages,
+    );
+
+    expect(outcome.ok && outcome.conversation.summary).toBe(
+      `${SUMMARY_FORMAT_MARKER}\nFAITS ÉTABLIS\n- Jeff a ouvert l'enveloppe.`,
+    );
+    const body = mocks.chatCompletion.mock.calls[0][1];
+    expect(body.messages[1].content).toContain("Un fait ancien.");
+    expect(body.messages[1].content).not.toContain("ACTIVE MEMORY");
+  });
+
+  it("borne la sortie et interdit d'oublier un fait que les nouveaux messages taisent", async () => {
     mocks.chatCompletion.mockResolvedValue(
       "**ÉTAT ACTUEL**\n- La scène se déroule dans la cuisine.",
     );
@@ -245,7 +338,10 @@ describe("updateSummary", () => {
       `Absolute limit: ${SUMMARY_MAX_BULLETS} bullets`,
     );
     expect(body.messages[0].content).toContain(
-      "Age without a current consequence is a reason to forget it",
+      "Silence never removes a fact",
+    );
+    expect(body.messages[0].content).toContain(
+      "An order is not carried out because it was given",
     );
   });
 
@@ -283,7 +379,7 @@ describe("updateSummary", () => {
   it("conserve l'ancien résumé si un lot de reconstruction échoue", async () => {
     mocks.chatCompletion
       .mockResolvedValueOnce("**ÉTAT ACTUEL**\n- Premier lot valide.")
-      .mockRejectedValueOnce(new Error("serveur indisponible"));
+      .mockRejectedValue(new Error("serveur indisponible"));
     const messages = Array.from({ length: 70 }, (_, i) => message(String(i)));
 
     const outcome = await rebuildSummary(

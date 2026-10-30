@@ -255,7 +255,12 @@ export const enPrompts: PromptPack = {
       `out loud, now is the moment: slip a short "(aside: …)" to the audience ` +
       `in addition to your line.`,
 
-    conversationSummary: (summary) => `[CONVERSATION SUMMARY]\n${summary}`,
+    conversationSummary: (summary) =>
+      `[CONVERSATION SUMMARY]\n` +
+      `This summary stops where the following messages begin. Its facts remain ` +
+      `true, but its last known state may be out of date: if they differ on ` +
+      `what is happening now, the following messages win.\n` +
+      summary,
 
     immediateReaction: ({ moodLabel, intensityPercent, impulse }) => {
       const actingDirection =
@@ -352,10 +357,13 @@ export const enPrompts: PromptPack = {
   twist: {
     system: ({ userName }) =>
       "You are the unseen author of an improvised scene between characters. " +
-      "The conversation is bogging down: write ONE stage direction that gets " +
-      "it going again. It can be an outside event, a piece of news arriving, " +
-      "an object being discovered, an incident, or an unexpected action by " +
-      "one of the characters present — without their words or thoughts.\n" +
+      "Write ONE stage direction that drives the current plot forward. Start " +
+      "from what is at stake: a secret, a conflict, a decision, an absent " +
+      "person, or an object or place already named in the scene. The twist " +
+      "tips them over: it forces someone to act, exposes what was hidden or " +
+      "complicates what was decided. It can be an event, a piece of news, an " +
+      "incident, or an unexpected action by one of the characters present — " +
+      "without their words or thoughts.\n" +
       "Constraints:\n" +
       "- one or two sentences in the present tense, 30 words at most;\n" +
       "- consistent with the established place, period and tone: surprising, " +
@@ -363,37 +371,55 @@ export const enPrompts: PromptPack = {
       "- no lines, no dialogue, no feelings imposed on anyone;\n" +
       `- never make ${userName} act or speak;\n` +
       "- do not introduce a new character who would need to speak;\n" +
-      "- avoid clichés (a phone ringing, a power cut, a sudden storm) unless " +
-      "the scene truly calls for them;\n" +
+      "- it must not be transferable: if it could appear unchanged in another " +
+      "story, find something else;\n" +
+      "- avoid stock props (a letter, an envelope, a note, something falling, " +
+      "a bird or animal turning up, a phone ringing, a key in the lock, a " +
+      "power cut, a sudden storm, rain stopping) unless the scene has already " +
+      "made them matter;\n" +
+      "- never reuse the device of a stage direction already played;\n" +
+      "- nothing supernatural: no object moves or opens by itself;\n" +
       "- give the characters something to react to, decide or argue about.\n" +
-      "Reply with the stage direction only, no prefix, quotes or commentary.",
-    user: ({ situation, summary, roster, transcript, theme }) =>
+      "Reply on two lines, no quotes or commentary:\n" +
+      "Stake: what matters most in the scene right now, using its proper names\n" +
+      "Stage direction: the twist that tips over that precise stake",
+    user: ({ situation, summary, roster, transcript, theme, previousTwists }) =>
       (situation ? `Starting situation:\n${situation}\n\n` : "") +
       (summary ? `What has happened so far:\n${summary}\n\n` : "") +
       `Characters present:\n${roster}\n\n` +
       `Latest lines:\n${transcript}\n\n` +
+      (previousTwists?.length
+        ? `Stage directions already played, not to be imitated:\n` +
+          previousTwists.map((twist) => `- ${twist}`).join("\n") +
+          "\n\n"
+        : "") +
       (theme ? `The audience is calling for a twist. Requested flavour: ${theme}\n\n` : "") +
       "Write the stage direction now.",
     themes: {
       surprise:
         "free — surprise us, while keeping to the tone of the scene.",
       catastrophe:
-        "a small disaster. Something breaks, overflows, catches fire or goes " +
+        "a small disaster. What the characters are doing or protecting goes " +
         "wrong: enough to cause panic, without seriously hurting anyone.",
       romance:
-        "a hint of romance. A love note, an anonymous gift, a startled glance, " +
-        "a gesture that is a little too tender: enough to fluster someone.",
+        "a hint of romance. An attraction, a gesture that is a little too " +
+        "tender or an old bond between two characters present becomes visible: " +
+        "enough to fluster someone.",
       absurd:
-        "downright absurd. Here the improbable is allowed: a comic, unlikely " +
-        "event (an unexpected animal, an object with no business being there, " +
-        "a ridiculous coincidence), described with a perfectly straight face.",
+        "downright absurd. Here the improbable is allowed, but not the " +
+        "supernatural: what preoccupies the characters takes a comic, unlikely " +
+        "turn, described with a perfectly straight face.",
       mystery:
-        "a mystery. A clue, an unsigned letter, an object that has moved, a " +
-        "disappearance: something nobody can explain.",
+        "a mystery. A detail already present in the scene stops adding up: " +
+        "something has changed, is missing or contradicts what was believed. " +
+        "Nobody can explain it for now, but a rational explanation stays possible.",
       revelation:
         "a coup de théâtre. A secret comes out, proof turns up, someone is " +
         "unmasked: a fact that turns the situation upside down.",
     },
+    stakeLabel: "Stake",
+    rejected:
+      /\b(?:by|of) (?:it|them)sel(?:f|ves)\b|\bon its own\b|\binvisible\b|\bsupernatural|\bas if\b|\bas though\b|\brain\s+(?:stops|ceases)/i,
     stripPrefixes: ["scene", "stage direction", "twist", "event"],
   },
 
@@ -453,35 +479,51 @@ export const enPrompts: PromptPack = {
 
   summary: {
     system: ({ maxBullets }) =>
-      "You maintain the working memory of a conversation. Rewrite it entirely " +
-      "in English from the previous summary and the new messages. The previous " +
-      "summary is a proposal to audit, never a source to copy: old information " +
-      "survives only while it is still true, active and useful to what comes " +
-      "next. Age without a current consequence is a reason to forget it. New " +
-      "messages always take priority and DELETE anything they contradict or " +
-      "supersede. CURRENT STATE is a snapshot replaced completely on every " +
-      "rewrite (at most 3 bullets). ACTIVE FACTS AND DECISIONS retains only " +
-      "lasting facts, constraints and commitments that remain valid (at most 4 " +
-      "bullets). OPEN QUESTIONS immediately removes anything answered, abandoned " +
-      "or no longer applicable (at most 3 bullets). IMPORTANT RECENT EVENTS keeps " +
-      "only events whose consequences are still active (at most 2 bullets). Keep " +
-      "no greetings, small talk, general tone, passing reactions or merely " +
-      "colourful details. Each message is " +
+      "You keep the memory of a fictional scene. It is the only trace of what " +
+      "leaves the history: whatever you omit, the characters forget for good. " +
+      "Rewrite it entirely in English from the previous summary and the new " +
+      "messages. ESTABLISHED FACTS is cumulative (at most 14 bullets): carry " +
+      "over every fact from the previous summary, even if the new messages do " +
+      "not mention it. Silence never removes a fact; only a new message that " +
+      "contradicts it or makes it obsolete replaces it. It covers completed " +
+      "events, revelations and who knows them, places and who they belong to, " +
+      "where each person is, the state of important objects, relationships, " +
+      "commitments and decisions. Each bullet fits in 25 words: keep the fact, " +
+      "not the story of how it came about. Rather than lose a fact, merge it " +
+      "with a neighbouring one. A fact is what actually happened: do not confuse it " +
+      "with what characters say, order, plan or believe. An order is not " +
+      "carried out because it was given, a character's mistake does not rewrite " +
+      "what happened, and a completed action stays true even if someone later " +
+      "ignores or contradicts it. Gestures between asterisks and stage " +
+      "directions are facts. Only assign a place or object to someone if the " +
+      "scene says so clearly; if the characters contradict each other on it, " +
+      "write that it is uncertain. Keep what limits the possibilities: a locked " +
+      "door, a place searched and found empty, where someone is. LAST KNOWN STATE is a snapshot replaced on every " +
+      "rewrite (at most 3 bullets): who is where and what is under way, " +
+      "misunderstandings included. It never contradicts ESTABLISHED FACTS, and " +
+      "an announced departure has not happened until someone has moved. OPEN QUESTIONS removes anything answered, " +
+      "abandoned or no longer applicable (at most 3 bullets). IMPORTANT RECENT " +
+      "EVENTS keeps what has just happened and still weighs on what follows (at " +
+      "most 2 bullets). Keep no greetings, small talk, general tone, passing " +
+      "reactions or merely colourful details. Each message is " +
       "prefixed with its speaker: never mix up attributions. Invent nothing. " +
-      `Absolute limit: ${maxBullets} bullets in total. If choices are needed, ` +
-      "prioritise active commitments and constraints, current situation, " +
-      "unresolved questions, lasting preferences, then recent events. Write " +
-      "bullets made of complete sentences ending in punctuation, then " +
-      "properly finish every section you started. Answer only with these " +
-      "sections: CURRENT STATE, ACTIVE FACTS AND DECISIONS, OPEN QUESTIONS, " +
-      "IMPORTANT RECENT EVENTS. Omit an empty section.",
-    user: ({ previousSummary, newMessages }) =>
+      `Absolute limit: ${maxBullets} bullets in total. In every section, each ` +
+      "line is a bullet starting with \"- \", made of complete sentences ending " +
+      "in punctuation. Properly finish every section you started. Answer only with these " +
+      "sections, in this order: LAST KNOWN STATE, IMPORTANT RECENT EVENTS, OPEN " +
+      "QUESTIONS, ESTABLISHED FACTS. Omit an empty section.",
+    user: ({ previousSummary, newMessages, compact }) =>
       (previousSummary ? `Existing summary:\n${previousSummary}\n\n` : "") +
       `New messages to integrate:\n${newMessages}\n\n` +
-      "Now rewrite the complete memory. Audit every old bullet and remove it if " +
-      "the new messages no longer establish that it is active or useful. The new " +
-      "messages are more recent than the whole existing summary and correct it " +
-      "where necessary.",
+      "Now rewrite the complete memory. Carry over every established fact unless " +
+      "a new message contradicts it or makes it obsolete. The new messages are " +
+      "more recent than the whole existing summary and correct it where necessary." +
+      (compact
+        ? "\n\nThe memory is full: this time, cut ESTABLISHED FACTS down to 10 " +
+          "bullets at most. Group older facts about the same matter into a single " +
+          "summary bullet, keep what still weighs on what follows and drop the " +
+          "detail of who said what."
+        : ""),
     messageLine: (name, content) => `${name}: ${content}`,
     emptySummaryError: "the server returned an empty summary",
     truncatedSummaryError: "the server returned a truncated summary",
@@ -500,6 +542,10 @@ export const enPrompts: PromptPack = {
       `revelations, threats, betrayals, accidents, violence or losses. Stay ` +
       `proportionate: something ordinary is usually 0 to 0.20, a notable event ` +
       `0.30 to 0.55, an upheaval 0.65 to 0.85, a major shock 0.90 to 1. ` +
+      `Surprise requires novelty: what the character already knows no longer ` +
+      `stuns them, even if the subject stays serious. News that is repeated, ` +
+      `recalled or confirmed is worth at most 0.45, and shock gives way to ` +
+      `fear, anger, grief or resolve. ` +
       `Answer ONLY with a JSON object in this format: ` +
       `{"mood": <${moodList}>, ` +
       `"intensity": number between 0 and 1, ` +
@@ -517,15 +563,25 @@ export const enPrompts: PromptPack = {
       warmth,
       closeness,
       stimulus,
+      alreadyKnown,
     }) =>
       `Character:\n${characterization}\n\n` +
       (sceneDescription
         ? `Established conversation setting:\n${sceneDescription}\n` +
           `Treat it as fact when interpreting the line, without reciting it.\n\n`
         : "") +
+      (alreadyKnown
+        ? `What has already happened, which the character has therefore already absorbed:\n${alreadyKnown}\n\n`
+        : "") +
       `State before the event: mood=${mood}, valence=${valence}, ` +
       `energy=${energy}, warmth=${warmth}, closeness=${closeness}\n\n` +
       `Event or line that has just occurred:\n${stimulus}\n\n` +
+      (alreadyKnown
+        ? `A fact that is new to the character keeps its full force, especially ` +
+          `if it is serious or unexplained. But if this only repeats, recalls or ` +
+          `confirms what has already happened, it is no longer a shock: intensity ` +
+          `stays at or below 0.45.\n\n`
+        : "") +
       `Now assess their reaction, before they speak.`,
   },
 

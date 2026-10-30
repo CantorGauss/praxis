@@ -73,7 +73,7 @@ import {
   writeReview,
   type SceneReview,
 } from "../services/review";
-import { assessEmotionalReaction } from "../services/emotionAnalysis";
+import { assessEmotionalReaction, knownContextFor } from "../services/emotionAnalysis";
 import { newId } from "../services/db";
 import {
   effectiveMaxOutputTokens,
@@ -1833,6 +1833,7 @@ class AppState {
         profile.customParameters,
         this.pack,
         conv.sceneDescription,
+        knownContextFor(conv.summary, transcript, speaker.name, this.pack),
       );
       state = assessment.state;
       immediateReaction = assessment.reaction;
