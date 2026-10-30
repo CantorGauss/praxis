@@ -159,9 +159,15 @@ export type TwistPrompts = {
     transcript: string;
     /** Consigne de ton, quand l'utilisateur a choisi un thème. */
     theme?: string | null;
+    /** Didascalies déjà jouées : sans elles, le modèle ressert le même procédé. */
+    previousTwists?: readonly string[];
   }): string;
   /** Consigne propre à chaque thème, ajoutée à la demande. */
   themes: Record<TwistTheme, string>;
+  /** Étiquette de la ligne d'enjeu, écrite avant la didascalie puis retirée. */
+  stakeLabel: string;
+  /** Tics que le modèle reproduit malgré la consigne : la didascalie est retirée. */
+  rejected: RegExp;
   /** Préfixes qu'un modèle ajoute volontiers et qu'on retire de la didascalie. */
   stripPrefixes: readonly string[];
 };
@@ -179,7 +185,12 @@ export type ReviewPrompts = {
 
 export type SummaryPrompts = {
   system(input: { maxBullets: number }): string;
-  user(input: { previousSummary: string | null; newMessages: string }): string;
+  user(input: {
+    previousSummary: string | null;
+    newMessages: string;
+    /** La mémoire est pleine : le modèle doit condenser ses faits anciens. */
+    compact?: boolean;
+  }): string;
   /** Ligne d'un message soumis au résumé. */
   messageLine(name: string, content: string): string;
   emptySummaryError: string;
@@ -201,6 +212,8 @@ export type EmotionPrompts = {
     warmth: string;
     closeness: string;
     stimulus: string;
+    /** Ce qui précède l'événement : sans cela, tout paraît nouveau au personnage. */
+    alreadyKnown: string | null;
   }): string;
 };
 

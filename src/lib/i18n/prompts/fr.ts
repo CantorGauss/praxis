@@ -253,7 +253,12 @@ export const frPrompts: PromptPack = {
       `tout haut, c'est le moment : glisse un court « (aparté : …) » au public, ` +
       `en plus de ta réplique.`,
 
-    conversationSummary: (summary) => `[RÉSUMÉ DE LA CONVERSATION]\n${summary}`,
+    conversationSummary: (summary) =>
+      `[RÉSUMÉ DE LA CONVERSATION]\n` +
+      `Ce résumé s'arrête là où commencent les messages qui suivent. Ses faits ` +
+      `restent vrais, mais son dernier état connu peut être dépassé : en cas ` +
+      `d'écart sur ce qui se passe maintenant, les messages qui suivent font foi.\n` +
+      summary,
 
     immediateReaction: ({ moodLabel, intensityPercent, impulse }) => {
       const actingDirection =
@@ -352,10 +357,13 @@ export const frPrompts: PromptPack = {
   twist: {
     system: ({ userName }) =>
       "Tu es l'auteur discret d'une scène improvisée entre personnages. " +
-      "La conversation s'enlise : écris UNE didascalie qui la relance. Ce peut " +
-      "être un événement extérieur, une nouvelle qui tombe, un objet qu'on " +
-      "découvre, un incident, ou une action inattendue de l'un des personnages " +
-      "présents — sans ses paroles ni ses pensées.\n" +
+      "Écris UNE didascalie qui relance l'intrigue en cours. Pars de ce qui est " +
+      "en jeu : un secret, un conflit, une décision, une personne absente, un " +
+      "objet ou un lieu déjà nommés dans la scène. L'imprévu les fait basculer : " +
+      "il force quelqu'un à agir, expose ce qui était caché ou complique ce qui " +
+      "était décidé. Ce peut être un événement, une nouvelle, un incident, ou " +
+      "une action inattendue de l'un des personnages présents — sans ses " +
+      "paroles ni ses pensées.\n" +
       "Contraintes :\n" +
       "- une ou deux phrases au présent, 30 mots au maximum ;\n" +
       "- cohérente avec le lieu, l'époque et le ton établis : surprenante, mais " +
@@ -363,38 +371,57 @@ export const frPrompts: PromptPack = {
       "- aucune réplique, aucun dialogue, aucun sentiment imposé à quiconque ;\n" +
       `- ne fais jamais agir ni parler ${userName} ;\n` +
       "- n'introduis pas de nouveau personnage qui devrait prendre la parole ;\n" +
-      "- évite les clichés (téléphone qui sonne, coupure de courant, orage " +
-      "soudain) sauf si la scène les appelle vraiment ;\n" +
+      "- elle doit être intransposable : si elle pourrait figurer telle quelle " +
+      "dans une autre histoire, trouve autre chose ;\n" +
+      "- évite les accessoires passe-partout (lettre, enveloppe, billet, objet " +
+      "qui tombe, oiseau ou animal qui surgit, téléphone qui sonne, clé dans la " +
+      "serrure, coupure de courant, orage soudain, pluie qui cesse) sauf si la " +
+      "scène en a déjà fait un enjeu ;\n" +
+      "- ne réutilise jamais le procédé d'une didascalie déjà jouée ;\n" +
+      "- rien de surnaturel : aucun objet ne bouge ni ne s'ouvre tout seul ;\n" +
       "- donne aux personnages quelque chose à quoi réagir, à décider ou à " +
       "débattre.\n" +
-      "Réponds uniquement par la didascalie, sans préfixe, sans guillemets ni commentaire.",
-    user: ({ situation, summary, roster, transcript, theme }) =>
+      "Réponds sur deux lignes, sans guillemets ni commentaire :\n" +
+      "Enjeu : ce qui compte le plus en ce moment dans la scène, avec ses noms propres\n" +
+      "Didascalie : l'imprévu qui fait basculer cet enjeu précis",
+    user: ({ situation, summary, roster, transcript, theme, previousTwists }) =>
       (situation ? `Situation de départ :\n${situation}\n\n` : "") +
       (summary ? `Ce qui s'est passé jusqu'ici :\n${summary}\n\n` : "") +
       `Personnages présents :\n${roster}\n\n` +
       `Dernières répliques :\n${transcript}\n\n` +
+      (previousTwists?.length
+        ? `Didascalies déjà jouées, à ne pas imiter :\n` +
+          previousTwists.map((twist) => `- ${twist}`).join("\n") +
+          "\n\n"
+        : "") +
       (theme ? `Le public réclame un imprévu. Couleur demandée : ${theme}\n\n` : "") +
       "Écris maintenant la didascalie.",
     themes: {
       surprise:
         "libre — surprends, en restant dans le ton de la scène.",
       catastrophe:
-        "une petite catastrophe. Quelque chose casse, déborde, prend feu ou " +
+        "une petite catastrophe. Ce que les personnages font ou protègent " +
         "tourne mal : de quoi semer la panique, sans blesser personne gravement.",
       romance:
-        "un parfum de romance. Un billet doux, un cadeau anonyme, un regard " +
-        "surpris, un geste trop tendre : de quoi troubler quelqu'un.",
+        "un parfum de romance. Une attirance, un geste trop tendre ou un ancien " +
+        "lien entre deux personnages présents devient visible : de quoi " +
+        "troubler quelqu'un.",
       absurd:
-        "franchement absurde. Ici, l'invraisemblable est permis : un événement " +
-        "comique et improbable (un animal inattendu, un objet qui n'a rien à " +
-        "faire là, une coïncidence ridicule), décrit avec le plus grand sérieux.",
+        "franchement absurde. Ici, l'invraisemblable est permis, mais pas le " +
+        "surnaturel : ce qui préoccupe les personnages prend un tour comique et " +
+        "improbable, décrit avec le plus grand sérieux.",
       mystery:
-        "un mystère. Un indice, une lettre sans signature, un objet déplacé, " +
-        "une disparition : quelque chose que personne ne sait expliquer.",
+        "un mystère. Un détail déjà présent dans la scène cesse de coller : " +
+        "quelque chose a changé, manque ou contredit ce qu'on croyait. Personne " +
+        "ne sait l'expliquer sur le moment, mais une explication rationnelle " +
+        "reste possible.",
       revelation:
         "un coup de théâtre. Un secret éclate, une preuve surgit, quelqu'un " +
         "est démasqué : un fait qui renverse la situation.",
     },
+    stakeLabel: "Enjeu",
+    rejected:
+      /\bseule?s?\b|\bde lui-m[êe]me\b|\bd['’]elle-m[êe]me\b|\binvisible\b|\bsurnaturel|\bcomme si\b|\bpluie\s+(?:cesse|s['’]arr[êe]te)/i,
     stripPrefixes: ["scène", "didascalie", "imprévu", "événement"],
   },
 
@@ -457,37 +484,56 @@ export const frPrompts: PromptPack = {
 
   summary: {
     system: ({ maxBullets }) =>
-      "Tu maintiens la mémoire de travail d'une conversation. Réécris-la " +
-      "entièrement en français à partir du résumé précédent et des nouveaux " +
-      "messages. Le résumé précédent est une proposition à auditer, jamais une " +
-      "source à recopier : une information ancienne ne survit que si elle est " +
-      "encore vraie, active et utile à la suite. L'ancienneté sans conséquence " +
-      "actuelle est une raison de l'oublier. Les nouveaux messages sont toujours " +
-      "prioritaires et SUPPRIMENT toute version contredite ou dépassée. " +
-      "ÉTAT ACTUEL est un instantané entièrement remplacé à chaque réécriture " +
-      "(3 puces maximum). FAITS ET DÉCISIONS ACTIFS ne conserve que les faits " +
-      "durables, contraintes et engagements encore valides (4 puces maximum). " +
-      "QUESTIONS OUVERTES retire immédiatement toute question répondue, abandonnée " +
-      "ou devenue sans objet (3 puces maximum). ÉVÉNEMENTS RÉCENTS IMPORTANTS ne " +
-      "garde que les événements dont les conséquences sont encore actives " +
+      "Tu tiens la mémoire d'une scène de fiction. Elle est la seule trace de " +
+      "ce qui sort de l'historique : ce que tu omets, les personnages l'oublient " +
+      "pour de bon. Réécris-la entièrement en français à partir du résumé " +
+      "précédent et des nouveaux messages. FAITS ÉTABLIS est cumulatif (14 puces " +
+      "maximum) : reprends chaque fait du résumé précédent, même si les nouveaux " +
+      "messages n'en parlent pas. Le silence ne retire jamais un fait ; seul un " +
+      "nouveau message qui le contredit ou le rend caduc le remplace. Y figurent " +
+      "les événements accomplis, les révélations et qui les connaît, les lieux " +
+      "et à qui ils appartiennent, où se trouve chacun, l'état des objets " +
+      "importants, les relations, les engagements et les décisions. Chaque puce " +
+      "tient en 25 mots : garde le fait, pas le récit de la façon dont il est " +
+      "arrivé. Plutôt que de perdre un fait, fusionne-le avec un fait voisin. " +
+      "Un fait est ce qui " +
+      "s'est réellement produit : ne le confonds pas avec ce que les personnages " +
+      "disent, ordonnent, projettent ou croient. Un ordre n'est pas exécuté parce " +
+      "qu'il a été donné, l'erreur d'un personnage ne réécrit pas ce qui s'est " +
+      "passé, et une action accomplie reste vraie même si quelqu'un l'ignore ou " +
+      "la contredit ensuite. Les gestes entre astérisques et les didascalies sont " +
+      "des faits. N'attribue un lieu ou un objet à quelqu'un que si la scène le " +
+      "dit clairement ; si les personnages se contredisent là-dessus, écris que " +
+      "c'est incertain. Garde ce qui limite les possibles : une porte verrouillée, " +
+      "un endroit fouillé et trouvé vide, un lieu où quelqu'un se trouve. " +
+      "DERNIER ÉTAT CONNU est un instantané remplacé à chaque " +
+      "réécriture (3 puces maximum) : qui est où et ce qui est en cours, " +
+      "méprises comprises. Il ne contredit jamais FAITS ÉTABLIS, et un départ " +
+      "annoncé n'a pas eu lieu tant que personne n'a bougé. QUESTIONS OUVERTES retire toute question répondue, " +
+      "abandonnée ou devenue sans objet (3 puces maximum). ÉVÉNEMENTS RÉCENTS " +
+      "IMPORTANTS garde ce qui vient de se passer et pèse encore sur la suite " +
       "(2 puces maximum). Ne garde ni salutations, ni bavardage, ni ton général, " +
       "ni réactions passagères, ni détail simplement pittoresque. " +
       "Chaque message est préfixé par son locuteur : ne mélange jamais les " +
       `attributions. N'invente rien. Limite absolue : ${maxBullets} puces au total. ` +
-      "S'il faut choisir, privilégie dans cet ordre : engagements et contraintes " +
-      "actifs, situation courante, questions non résolues, préférences durables, " +
-      "puis événements récents. Écris des puces constituées de phrases " +
-      "complètes terminées par une ponctuation, puis termine proprement toutes " +
-      "les rubriques commencées. Réponds uniquement avec ces rubriques : " +
-      "ÉTAT ACTUEL, FAITS ET DÉCISIONS ACTIFS, QUESTIONS OUVERTES, ÉVÉNEMENTS " +
-      "RÉCENTS IMPORTANTS. Omets une rubrique vide.",
-    user: ({ previousSummary, newMessages }) =>
+      "Dans chaque rubrique, chaque ligne est une puce commençant par « - », " +
+      "faite de phrases complètes terminées par une ponctuation. Termine " +
+      "proprement toutes les rubriques commencées. " +
+      "Réponds uniquement avec ces rubriques, dans cet ordre : DERNIER ÉTAT " +
+      "CONNU, ÉVÉNEMENTS RÉCENTS IMPORTANTS, QUESTIONS OUVERTES, FAITS ÉTABLIS. " +
+      "Omets une rubrique vide.",
+    user: ({ previousSummary, newMessages, compact }) =>
       (previousSummary ? `Résumé existant :\n${previousSummary}\n\n` : "") +
       `Nouveaux messages à intégrer :\n${newMessages}\n\n` +
-      "Réécris maintenant la mémoire complète. Examine chaque ancienne puce : " +
-      "supprime-la si les nouveaux messages ne permettent plus d'établir qu'elle " +
-      "est encore active ou utile. Les nouveaux messages sont plus récents que " +
-      "tout le résumé existant et le corrigent si nécessaire.",
+      "Réécris maintenant la mémoire complète. Reprends chaque fait établi, sauf " +
+      "si un nouveau message le contredit ou le rend caduc. Les nouveaux messages " +
+      "sont plus récents que tout le résumé existant et le corrigent si nécessaire." +
+      (compact
+        ? "\n\nLa mémoire est pleine : cette fois, réduis FAITS ÉTABLIS à 10 puces " +
+          "au plus. Regroupe les faits anciens d'une même affaire en une seule " +
+          "puce de synthèse, garde ce qui pèse encore sur la suite et laisse " +
+          "tomber le détail de qui a dit quoi."
+        : ""),
     messageLine: (name, content) => `${name} : ${content}`,
     emptySummaryError: "le serveur a renvoyé un résumé vide",
     truncatedSummaryError: "le serveur a renvoyé un résumé tronqué",
@@ -506,6 +552,10 @@ export const frPrompts: PromptPack = {
       `trahisons, accidents, violences ou pertes. Reste proportionné : une ` +
       `banalité vaut généralement 0 à 0.20, un événement notable 0.30 à 0.55, ` +
       `un bouleversement 0.65 à 0.85, un choc majeur 0.90 à 1. ` +
+      `La surprise suppose la nouveauté : ce que le personnage sait déjà ne le ` +
+      `sidère plus, même si le sujet reste grave. Une nouvelle répétée, rappelée ` +
+      `ou confirmée vaut au plus 0.45, et le choc laisse place à la peur, la ` +
+      `colère, le chagrin ou la détermination. ` +
       `Réponds UNIQUEMENT avec un objet JSON au format : ` +
       `{"mood": <${moodList}>, ` +
       `"intensity": nombre entre 0 et 1, ` +
@@ -523,15 +573,25 @@ export const frPrompts: PromptPack = {
       warmth,
       closeness,
       stimulus,
+      alreadyKnown,
     }) =>
       `Personnage :\n${characterization}\n\n` +
       (sceneDescription
         ? `Situation établie de la conversation :\n${sceneDescription}\n` +
           `Considère-la comme un fait pour interpréter la réplique, sans la réciter.\n\n`
         : "") +
+      (alreadyKnown
+        ? `Ce qui s'est déjà passé, que le personnage a donc déjà encaissé :\n${alreadyKnown}\n\n`
+        : "") +
       `État avant l'événement : humeur=${mood}, valence=${valence}, ` +
       `énergie=${energy}, chaleur=${warmth}, proximité=${closeness}\n\n` +
       `Événement ou réplique qui vient de survenir :\n${stimulus}\n\n` +
+      (alreadyKnown
+        ? `Un fait nouveau pour le personnage garde toute sa force, surtout s'il ` +
+          `est grave ou inexplicable. Mais si cela ne fait que répéter, rappeler ` +
+          `ou confirmer ce qui s'est déjà passé, ce n'est plus un choc : ` +
+          `l'intensité ne dépasse pas 0.45.\n\n`
+        : "") +
       `Évalue maintenant sa réaction, avant qu'il ou elle ne parle.`,
   },
 

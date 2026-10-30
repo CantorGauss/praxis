@@ -20,9 +20,9 @@ vi.mock("../repositories", () => ({
   emotionRepo: { save: vi.fn() },
 }));
 
-import { chatCompletion } from "../llmClient";
+import { chatCompletion, type ChatMessage } from "../llmClient";
 import { emotionRepo } from "../repositories";
-import { assessEmotionalReaction } from "../emotionAnalysis";
+import { assessEmotionalReaction, knownContextFor } from "../emotionAnalysis";
 import { frPrompts } from "../../i18n/prompts";
 
 const persona: Persona = {
@@ -138,5 +138,59 @@ describe("assessEmotionalReaction", () => {
     expect(messages[1].content.indexOf(situation)).toBeLessThan(
       messages[1].content.indexOf("Et voilà, c'est fini."),
     );
+  });
+
+  it("présente ce qui s'est déjà passé avant l'événement à évaluer", async () => {
+    vi.mocked(chatCompletion).mockResolvedValue(
+      JSON.stringify({ mood: "afraid", intensity: 0.4 }),
+    );
+
+    await assessEmotionalReaction(
+      TEST_CONNECTION,
+      "local-model",
+      persona,
+      state,
+      "Jeff : Il est mort, je viens de vous le dire !",
+      {},
+      frPrompts,
+      null,
+      "Jeff : Il est mort.",
+    );
+
+    const request = vi.mocked(chatCompletion).mock.calls[0][1];
+    const messages = request.messages as { content: string }[];
+    expect(messages[0].content).toContain("La surprise suppose la nouveauté");
+    expect(messages[1].content.indexOf("Jeff : Il est mort.")).toBeLessThan(
+      messages[1].content.indexOf("je viens de vous le dire"),
+    );
+  });
+});
+
+describe("knownContextFor", () => {
+  const transcript: ChatMessage[] = [
+    { role: "user", content: "Jeff : Il est mort." },
+    { role: "assistant", content: "Tu es sûr ?" },
+    { role: "user", content: "Jeff : Je viens de vous le dire !" },
+  ];
+
+  it("reprend le résumé et les tours précédents, sans l'événement lui-même", () => {
+    const known = knownContextFor(
+      "[ACTIVE MEMORY v5]\nFAITS ÉTABLIS\n- Arthur a laissé une lettre.",
+      transcript,
+      "Inès",
+      frPrompts,
+    );
+
+    expect(known).toContain("Arthur a laissé une lettre.");
+    expect(known).toContain("Jeff : Il est mort.");
+    expect(known).toContain("Inès : Tu es sûr ?");
+    expect(known).not.toContain("Je viens de vous le dire");
+    expect(known).not.toContain("ACTIVE MEMORY");
+  });
+
+  it("ne renvoie rien quand l'événement ouvre la conversation", () => {
+    expect(
+      knownContextFor(null, [{ role: "user", content: "Jeff : Bonjour." }], "Inès", frPrompts),
+    ).toBeNull();
   });
 });

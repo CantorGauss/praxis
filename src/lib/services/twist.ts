@@ -2,6 +2,7 @@ import type { ConnectionTarget, Message } from "../types";
 import { DEFAULT_PROMPT_PACK, type PromptPack, type TwistTheme } from "../i18n/prompts";
 import { chatCompletion, noThinkingRequestParameters } from "./llmClient";
 import { publicText } from "./messageFormat";
+import { stripSummaryMarkers } from "./promptAssembler";
 import type { MessageLabeller } from "./scene";
 
 /**
@@ -19,7 +20,11 @@ import type { MessageLabeller } from "./scene";
 export const TWIST_COOLDOWN_LINES = 8;
 
 /** Répliques récentes soumises à l'auteur de l'imprévu. */
-const TWIST_CONTEXT_MESSAGES = 10;
+const TWIST_CONTEXT_MESSAGES = 14;
+/** Didascalies rappelées à l'auteur, pour qu'il ne resserve pas le même procédé. */
+const TWIST_MEMORY = 6;
+/** Tirages tentés quand le modèle retombe sur un tic que la consigne interdit. */
+const TWIST_ATTEMPTS = 3;
 /** Au-delà, ce n'est plus une didascalie mais un paragraphe de roman. */
 const MAX_TWIST_LENGTH = 280;
 const MIN_TWIST_LENGTH = 8;
@@ -34,8 +39,11 @@ export function cleanTwist(
   speakerNames: readonly string[] = [],
   pack: PromptPack = DEFAULT_PROMPT_PACK,
 ): string | null {
+  // L'enjeu sert à ancrer l'imprévu dans l'intrigue ; il ne va pas sur scène.
+  const stakeLine = new RegExp(`^[*_\\s]*${pack.twist.stakeLabel}[*_\\s]*[:：—–-].*(?:\\n\\s*|$)`, "i");
   // Premier paragraphe seulement : la suite est presque toujours un commentaire.
-  let text = raw.trim().split(/\n\s*\n/)[0]?.replace(/\s+/g, " ").trim() ?? "";
+  let text =
+    raw.trim().replace(stakeLine, "").split(/\n\s*\n/)[0]?.replace(/\s+/g, " ").trim() ?? "";
 
   // « (Scène : …) », « Didascalie : … », « **Imprévu** — … »
   for (let pass = 0; pass < 3; pass++) {
@@ -70,6 +78,20 @@ export function cleanTwist(
     text = sentenceEnd > MIN_TWIST_LENGTH ? cut.slice(0, sentenceEnd + 1) : `${cut.trimEnd()}…`;
   }
   return text;
+}
+
+/**
+ * Détecte le nom de l'utilisateur suivi d'un verbe (« Jeff renverse son thé »).
+ * Une fausse alerte ne coûte qu'un nouveau tirage ; laisser passer ôte à
+ * l'utilisateur la main sur son propre rôle.
+ *
+ * Exporté pour les tests.
+ */
+export function actsForUser(twist: string, userName: string): boolean {
+  const name = userName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!name) return false;
+  return new RegExp(`(?<![\\p{L}\\p{N}])${name}\\s+(?!et\\b|ou\\b|and\\b|or\\b)\\p{Ll}`, "iu").test(twist)
+    && !new RegExp(`\\p{Ll}\\s+${name}\\s`, "u").test(twist);
 }
 
 export type TwistInput = {
@@ -112,37 +134,53 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
         : pack.director.transcriptLine(input.label(m), publicText(m.content)),
     )
     .join("\n");
+  const previousTwists = input.recentMessages
+    .filter((m) => m.kind === "narration" && m.content.trim())
+    .slice(-TWIST_MEMORY)
+    .map((m) => m.content.trim());
 
+  // Une consigne négative ne suffit pas : le modèle ressert ses tics une fois
+  // sur dix. Si tous les tirages y retombent, mieux vaut un imprévu imparfait
+  // qu'un bouton qui ne fait rien.
+  let fallback: string | null = null;
   try {
-    const raw = await chatCompletion(
-      { ...input.connection, timeoutMs: 20_000 },
-      {
-        ...noThinkingRequestParameters(input.connection, input.extraParameters ?? {}),
-        model: input.modelId,
-        // L'imprévu doit surprendre : plus de hasard que pour les répliques.
-        temperature: 1,
-        max_tokens: 120,
-        messages: [
-          { role: "system", content: pack.twist.system({ userName: input.userName }) },
-          {
-            role: "user",
-            content: pack.twist.user({
-              situation: input.sceneDescription?.trim() || null,
-              summary: input.summary?.trim() || null,
-              roster,
-              transcript: transcript || pack.director.emptyTranscript,
-              theme: input.theme ? pack.twist.themes[input.theme] : null,
-            }),
-          },
-        ],
-      },
-    );
-    return cleanTwist(
-      raw,
-      [...input.participants.map((p) => p.name), input.userName],
-      pack,
-    );
+    for (let attempt = 0; attempt < TWIST_ATTEMPTS; attempt += 1) {
+      const raw = await chatCompletion(
+        { ...input.connection, timeoutMs: 20_000 },
+        {
+          ...noThinkingRequestParameters(input.connection, input.extraParameters ?? {}),
+          model: input.modelId,
+          // L'imprévu doit surprendre : plus de hasard que pour les répliques.
+          temperature: 0.9,
+          max_tokens: 200,
+          messages: [
+            { role: "system", content: pack.twist.system({ userName: input.userName }) },
+            {
+              role: "user",
+              content: pack.twist.user({
+                situation: input.sceneDescription?.trim() || null,
+                summary: input.summary ? stripSummaryMarkers(input.summary) || null : null,
+                roster,
+                transcript: transcript || pack.director.emptyTranscript,
+                theme: input.theme ? pack.twist.themes[input.theme] : null,
+                previousTwists,
+              }),
+            },
+          ],
+        },
+      );
+      const twist = cleanTwist(
+        raw,
+        [...input.participants.map((p) => p.name), input.userName],
+        pack,
+      );
+      if (twist && !pack.twist.rejected.test(twist) && !actsForUser(twist, input.userName)) {
+        return twist;
+      }
+      fallback ??= twist;
+    }
   } catch {
-    return null;
+    // Un échec en cours de route ne doit pas perdre le tirage déjà obtenu.
   }
+  return fallback;
 }

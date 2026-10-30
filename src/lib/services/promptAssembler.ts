@@ -24,6 +24,17 @@ export function estimateTokens(text: string): number {
 }
 
 /**
+ * Le marqueur de format d'un résumé est une donnée applicative : montré à un
+ * modèle, il est recopié, voire « incrémenté » d'une réécriture à l'autre.
+ * Toute version est retirée, y compris une version inventée par le modèle.
+ */
+export function stripSummaryMarkers(summary: string): string {
+  return summary
+    .replace(/^[ \t*]*\[(?:ACTIVE MEMORY|MÉMOIRE ACTIVE) v\d+\][ \t*]*(?:\r?\n|$)/gm, "")
+    .trim();
+}
+
+/**
  * Présent uniquement quand la conversation réunit plusieurs personnages :
  * l'historique est alors réécrit du point de vue du locuteur.
  */
@@ -166,7 +177,7 @@ function buildSystemPrompt(
   }
 
   if (includeSummary && summary) {
-    parts.push(a.conversationSummary(summary));
+    parts.push(a.conversationSummary(stripSummaryMarkers(summary)));
   }
 
   return parts.join("\n\n");
