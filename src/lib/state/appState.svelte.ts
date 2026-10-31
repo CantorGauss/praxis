@@ -53,6 +53,7 @@ import {
   describeAddressing,
   describeAutonomousTurn,
   describeLastTurn,
+  describeOwnEntrance,
   describeSceneEvent,
   detectAddressee,
   planContinuation,
@@ -848,7 +849,7 @@ class AppState {
     };
     await this.refreshEmotionalState();
     await this.addNarration(conv.id, description);
-    if (react) await this.reactToScene(conv.id);
+    if (react) await this.reactToScene(conv.id, personaId);
   }
 
   /** Fait sortir un personnage ; ses répliques restent dans l'historique. */
@@ -892,13 +893,33 @@ class AppState {
     if (react) await this.reactToScene(conv.id);
   }
 
-  /** Un tour de réaction à une didascalie, sans message de l'utilisateur. */
-  private async reactToScene(conversationId: string): Promise<void> {
+  /**
+   * Un tour de réaction à une didascalie, sans message de l'utilisateur.
+   * Celui qui entre parle d'abord, seul à recevoir la consigne qui lui dit que
+   * l'arrivée est la sienne : les autres réagissent ensuite à ce qu'il a fait.
+   */
+  private async reactToScene(
+    conversationId: string,
+    entrantId: string | null = null,
+  ): Promise<void> {
     if (this.participantIds.length === 0) return;
     await this.withTurn(async () => {
-      await this.playRound(conversationId, [...this.participantIds], () =>
-        describeSceneEvent(this.userName, this.pack),
-      );
+      const entrant = this.personaById(entrantId);
+      const completed =
+        !entrant ||
+        (await this.playRound(
+          conversationId,
+          [entrant.id],
+          () => describeOwnEntrance(entrant.name, this.pack),
+          true,
+        ));
+      if (completed) {
+        await this.playRound(
+          conversationId,
+          this.participantIds.filter((id) => id !== entrantId),
+          () => describeSceneEvent(this.userName, this.pack),
+        );
+      }
       this.pendingSpeakerIds = [];
       await this.runPostTurnTasks(conversationId);
     });
@@ -1403,6 +1424,23 @@ class AppState {
     }
   }
 
+  /**
+   * Le directeur peut redésigner celui qui vient de parler : le personnage se
+   * répondrait alors à lui-même. La parole passe au suivant du tour de table.
+   */
+  private withoutRepeat(chosen: string[], fallback: string[]): string[] {
+    const last = this.messages[this.messages.length - 1];
+    if (
+      this.participants.length < 2 ||
+      last?.role !== "assistant" ||
+      last.kind !== "speech" ||
+      chosen[0] !== last.personaId
+    ) {
+      return chosen;
+    }
+    return fallback.filter((id) => id !== last.personaId).slice(0, 1);
+  }
+
   private lastSpeakerId(): string | null {
     return (
       [...this.messages]
@@ -1632,10 +1670,10 @@ class AppState {
       if (this.queuedMessage || this.pendingSceneActions.length) return true;
       const fallback = step === 0 ? speakerIds : planContinuation(this.roster, this.lastSpeakerId());
       const last = this.messages[this.messages.length - 1];
-      const chosen = fixedSpeakers ? [speakerIds[step]] : await this.decideSpeakers(fallback, {
+      const chosen = fixedSpeakers ? [speakerIds[step]] : this.withoutRepeat(await this.decideSpeakers(fallback, {
         afterUserMessage: step === 0 && last?.role === "user" && last.kind === "speech",
         consultModel: true,
-      });
+      }), fallback);
       if (this.turnAborted || this.currentConversationId !== conversationId) return false;
       if (this.queuedMessage || this.pendingSceneActions.length) return true;
       // Personne n'a envie de parler alors que l'utilisateur écoute : plutôt
@@ -1855,7 +1893,12 @@ class AppState {
         profile.customParameters,
         this.pack,
         conv.sceneDescription,
-        knownContextFor(conv.summary, transcript, speaker.name, this.pack),
+        knownContextFor(
+          knowledge.summaryKnown ? conv.summary : null,
+          transcript,
+          speaker.name,
+          this.pack,
+        ),
       );
       state = assessment.state;
       immediateReaction = assessment.reaction;
@@ -2272,7 +2315,10 @@ class AppState {
       const lastUser = [...this.messages]
         .reverse()
         .find((m) => m.role === "user" && m.kind === "speech");
-      const addressing = lastUser
+      const previous = this.messages[this.messages.length - 1];
+      const addressing = previous?.kind === "narration"
+        ? this.narrationAddressing(previous, speaker)
+        : lastUser
         ? this.addressingFor(planSpeakers(lastUser.content, this.roster, null))(
             speaker.id,
           )
@@ -2281,6 +2327,20 @@ class AppState {
       this.pendingSpeakerIds = [];
       await this.runPostTurnTasks(conv.id);
     });
+  }
+
+  /**
+   * Consigne d'une réplique rejouée juste après une didascalie. L'historique
+   * ne dit pas si elle annonçait une entrée : un personnage nommé par la
+   * didascalie et qui n'a encore rien dit vient forcément d'arriver.
+   */
+  private narrationAddressing(narration: Message, speaker: Persona): string {
+    const entering =
+      narration.content.toLowerCase().includes(speaker.name.toLowerCase()) &&
+      !this.messages.some((m) => m.kind === "speech" && m.personaId === speaker.id);
+    return entering
+      ? describeOwnEntrance(speaker.name, this.pack)
+      : describeSceneEvent(this.userName, this.pack);
   }
 
   /** Modifie le dernier message utilisateur et rejoue le tour complet. */

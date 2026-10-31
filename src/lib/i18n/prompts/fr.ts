@@ -156,6 +156,15 @@ export const frPrompts: PromptPack = {
       `comme le ferait ton personnage. ${userName} n'a rien dit : ne fais pas ` +
       `comme s'il t'avait parlé.`,
 
+    ownEntrance: (speakerName) =>
+      `La ligne « (Scène : …) » la plus récente parle de toi : c'est toi, ` +
+      `${speakerName}, qui viens d'arriver, et les autres te découvrent à ` +
+      `l'instant. Aucune des répliques précédentes n'est de toi, et tu n'as ` +
+      `rien entendu de ce qui s'est dit avant ton entrée : ne les reprends ` +
+      `pas à ton compte et ne fais pas comme si tu les connaissais. Écris en ` +
+      `une ou deux phrases ce que toi, ${speakerName}, tu fais et dis en ` +
+      `arrivant.`,
+
     everyoneMentions: ["tous", "tout le monde", "everyone", "all"],
   },
 

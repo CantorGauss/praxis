@@ -438,6 +438,19 @@ export function describeSceneEvent(
 }
 
 /**
+ * Consigne de celui qui vient d'entrer. La consigne générale lui demanderait
+ * de réagir à sa propre arrivée, comme à un événement extérieur : il prend
+ * alors le point de vue de ceux qui étaient déjà là, jusqu'à s'accueillir
+ * lui-même par son nom.
+ */
+export function describeOwnEntrance(
+  speakerName: string,
+  pack: PromptPack = DEFAULT_PROMPT_PACK,
+): string {
+  return pack.scene.ownEntrance(speakerName);
+}
+
+/**
  * Ordre de parole pour un tour sans message de l'utilisateur (« Continuer »).
  * Les personnages reprennent après le dernier qui a parlé, pour éviter qu'un
  * même personnage enchaîne deux fois de suite.

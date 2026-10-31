@@ -68,6 +68,8 @@ export type ScenePrompts = {
   departedReminder(names: string[]): string;
   /** Tour déclenché par une didascalie (arrivée, départ). */
   sceneEvent(userName: string): string;
+  /** Consigne de celui qui entre : la didascalie parle de lui, pas d'un tiers. */
+  ownEntrance(speakerName: string): string;
   /** Mot-clés d'une mention « à tout le monde ». */
   everyoneMentions: readonly string[];
 };

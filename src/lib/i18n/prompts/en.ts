@@ -158,6 +158,14 @@ export const enPrompts: PromptPack = {
       `character would. ${userName} said nothing: do not act as if they had ` +
       `spoken to you.`,
 
+    ownEntrance: (speakerName) =>
+      `The most recent "(Scene: …)" line is about you: you, ${speakerName}, ` +
+      `have just arrived, and the others are only now seeing you. None of the ` +
+      `earlier lines are yours, and you heard nothing of what was said before ` +
+      `you came in: do not take them as your own or act as if you knew them. ` +
+      `Write in one or two sentences what you, ${speakerName}, do and say as ` +
+      `you arrive.`,
+
     everyoneMentions: ["everyone", "all", "tous", "tout le monde"],
   },
 

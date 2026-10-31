@@ -5,8 +5,9 @@ import * as llm from "../../services/llmClient";
 import * as director from "../../services/director";
 import * as summaries from "../../services/summaryService";
 import * as coordination from "../../services/coordination";
+import * as emotionAnalysis from "../../services/emotionAnalysis";
 import type { MessageInteraction } from "../../types";
-import { conversationRepo, messageRepo, participantRepo, presenceRepo, profileRepo } from "../../services/repositories";
+import { conversationRepo, emotionRepo, messageRepo, participantRepo, presenceRepo, profileRepo } from "../../services/repositories";
 import { MAX_CONSECUTIVE_AI_TURNS } from "../../services/scene";
 
 const NOW = "2026-09-19T12:00:00.000Z";
@@ -122,6 +123,40 @@ describe("coordination de la scène", () => {
     expect(messageRepo.saveInteraction).toHaveBeenCalledTimes(4);
   });
 
+  it("ne laisse pas le directeur faire parler deux fois de suite le même personnage", async () => {
+    app.settings.sceneDirector = "model";
+    vi.spyOn(director, "chooseSpeakers").mockResolvedValue(["anna"]);
+    await app.sendMessage("Une idée ?");
+    expect(speakerIds).toEqual(["anna", "marc"]);
+  });
+
+  it("fait parler l'entrant d'abord et lui dit que l'arrivée est la sienne", async () => {
+    app.settings.sceneDirector = "model";
+    app.participantIds = ["anna"];
+    vi.spyOn(participantRepo, "join").mockResolvedValue();
+    vi.spyOn(director, "chooseSpeakers").mockResolvedValue(["marc"]);
+    await app.enterScene("marc", "Marc entre dans la pièce.");
+    expect(speakerIds).toEqual(["marc", "anna"]);
+    const requests = vi.mocked(llm.streamChat).mock.calls.map(([, , body]) => JSON.stringify(body));
+    expect(requests[0]).toContain("c'est toi, Marc, qui viens d'arriver");
+    expect(requests[1]).not.toContain("qui viens d'arriver");
+    expect(requests[1]).toContain("Quelque chose vient de se produire");
+  });
+
+  it("rappelle à l'entrant que l'arrivée est la sienne quand sa réplique est régénérée", async () => {
+    app.participantIds = ["anna"];
+    vi.spyOn(participantRepo, "join").mockResolvedValue();
+    await app.enterScene("marc", "Marc entre dans la pièce.", false);
+    app.messages = [...app.messages, {
+      id: "marc-1", conversationId: conversation.id, role: "assistant", kind: "speech",
+      content: "Une réplique ratée.", status: "complete", addressee: null,
+      personaId: "marc", personaName: "Marc", createdAt: NOW,
+    }];
+    await app.regenerate();
+    expect(JSON.stringify(vi.mocked(llm.streamChat).mock.calls[0][2]))
+      .toContain("c'est toi, Marc, qui viens d'arriver");
+  });
+
   it("conserve les destinataires imposés et ne délègue pas ce choix au directeur", async () => {
     app.settings.sceneDirector = "model";
     const choose = vi.spyOn(director, "chooseSpeakers").mockResolvedValue(["anna"]);
@@ -198,6 +233,35 @@ describe("coordination de la scène", () => {
     expect(marc.text).toContain("[CE QUE TU SAIS DE LA SCÈNE]");
     expect(anna.text).toContain("4512");
     expect(anna.text).not.toContain("[CE QUE TU SAIS DE LA SCÈNE]");
+  });
+
+  it("ne donne pas non plus le résumé à l'analyse émotionnelle d'un arrivant", async () => {
+    const before = "2026-09-19T11:00:00.000Z";
+    app.settings = { ...app.settings, emotionEnabled: true, emotionAnalysisEnabled: true };
+    app.conversations = [{
+      ...conversation, summary: "Le code du coffre est 4512.", summaryThroughMessageId: "old-1",
+    }];
+    app.participantIds = ["anna"];
+    app.messages = [
+      { id: "old-1", conversationId: conversation.id, role: "user", kind: "speech",
+        content: "Un secret.", status: "complete", createdAt: before,
+        personaId: null, personaName: null, addressee: null },
+    ];
+    vi.mocked(presenceRepo.list).mockResolvedValue([
+      { personaId: "anna", enteredAt: null, leftAt: null },
+      { personaId: "marc", enteredAt: NOW, leftAt: null },
+    ]);
+    vi.spyOn(participantRepo, "join").mockResolvedValue();
+    vi.spyOn(emotionRepo, "get").mockResolvedValue(null);
+    vi.spyOn(emotionRepo, "save").mockResolvedValue();
+    const assess = vi.spyOn(emotionAnalysis, "assessEmotionalReaction")
+      .mockImplementation(async (_target, _model, _persona, state) => ({ state, reaction: null }));
+    await app.enterScene("marc", "Marc entre dans le café.");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const known = (id: string) => assess.mock.calls.find((call) => call[2].id === id)?.[8];
+    expect(known("marc") ?? "").not.toContain("4512");
+    expect(known("anna")).toContain("4512");
   });
 
   it("ne conserve pas l'ancien accord lors d'une régénération de la dernière réplique", async () => {
