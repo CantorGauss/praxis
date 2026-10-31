@@ -262,6 +262,13 @@ export const enPrompts: PromptPack = {
       `what is happening now, the following messages win.\n` +
       summary,
 
+    partialPresence: () =>
+      `[WHAT YOU KNOW OF THE SCENE]\n` +
+      `You were not there for the whole conversation: the history only shows ` +
+      `what was said while you were present. You do not know what happened ` +
+      `before you arrived or while you were away. Do not act as if you did; ` +
+      `if it matters, you can ask or guess out loud.`,
+
     immediateReaction: ({ moodLabel, intensityPercent, impulse }) => {
       const actingDirection =
         intensityPercent >= 65

@@ -6,7 +6,7 @@ import * as director from "../../services/director";
 import * as summaries from "../../services/summaryService";
 import * as coordination from "../../services/coordination";
 import type { MessageInteraction } from "../../types";
-import { conversationRepo, messageRepo, participantRepo, profileRepo } from "../../services/repositories";
+import { conversationRepo, messageRepo, participantRepo, presenceRepo, profileRepo } from "../../services/repositories";
 import { MAX_CONSECUTIVE_AI_TURNS } from "../../services/scene";
 
 const NOW = "2026-09-19T12:00:00.000Z";
@@ -75,6 +75,9 @@ beforeEach(() => {
     conversationId: conversation.id, personaId: p.id, position, active: true,
   })));
   vi.spyOn(participantRepo, "replace").mockResolvedValue();
+  vi.spyOn(participantRepo, "join").mockResolvedValue();
+  vi.spyOn(participantRepo, "leave").mockResolvedValue();
+  vi.spyOn(presenceRepo, "list").mockResolvedValue([]);
   vi.spyOn(llm, "streamChat").mockImplementation(async (_target, _id, _body, callbacks) => {
     speakerIds.push(app.streamingPersonaId);
     reply(callbacks);
@@ -164,6 +167,37 @@ describe("coordination de la scène", () => {
     vi.mocked(messageRepo.list).mockResolvedValueOnce(saved);
     await app.openConversation(conversation.id);
     expect(app.proposals[0].status).toBe("agreed");
+  });
+
+  it("ne révèle pas à un arrivant ce qui s'est dit avant son entrée", async () => {
+    const before = "2026-09-19T11:00:00.000Z";
+    app.participantIds = ["anna"];
+    app.messages = [
+      { id: "old-1", conversationId: conversation.id, role: "user", kind: "speech",
+        content: "Le code du coffre est 4512.", status: "complete", createdAt: before,
+        personaId: null, personaName: null, addressee: null },
+      { id: "old-2", conversationId: conversation.id, role: "assistant", kind: "speech",
+        content: "Je le garderai pour moi.", status: "complete", createdAt: before,
+        personaId: "anna", personaName: "Anna", addressee: null },
+    ];
+    vi.mocked(presenceRepo.list).mockResolvedValue([
+      { personaId: "anna", enteredAt: null, leftAt: null },
+      { personaId: "marc", enteredAt: NOW, leftAt: null },
+    ]);
+    await app.enterScene("marc", "Marc entre dans le café.");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const prompts = vi.mocked(llm.streamChat).mock.calls.map((call) => ({
+      speaker: (call[2].messages as { content: string }[])[0].content,
+      text: JSON.stringify(call[2].messages),
+    }));
+    const marc = prompts.find((p) => p.speaker.includes("Tu es Marc."))!;
+    const anna = prompts.find((p) => p.speaker.includes("Tu es Anna."))!;
+    expect(marc.text).not.toContain("4512");
+    expect(marc.text).toContain("Marc entre dans le café.");
+    expect(marc.text).toContain("[CE QUE TU SAIS DE LA SCÈNE]");
+    expect(anna.text).toContain("4512");
+    expect(anna.text).not.toContain("[CE QUE TU SAIS DE LA SCÈNE]");
   });
 
   it("ne conserve pas l'ancien accord lors d'une régénération de la dernière réplique", async () => {
