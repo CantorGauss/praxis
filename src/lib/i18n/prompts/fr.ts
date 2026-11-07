@@ -222,6 +222,13 @@ export const frPrompts: PromptPack = {
       `Ce cadre est connu de tous les personnages présents. Tiens-le pour ` +
       `acquis sans le réciter, et n'en contredis pas les éléments.`,
 
+    identityReminder: (personaName, description) =>
+      `[QUI TU ES, ${personaName.toUpperCase()}]\n${description}\n` +
+      `Cette fiche fait foi sur ton passé et tes liens. Si l'une de tes ` +
+      `répliques précédentes l'a contredite, c'était une erreur de ta part : ` +
+      `reconnais-la simplement, sans la défendre ni t'en étonner. Ne récite pas ` +
+      `ce rappel.`,
+
     sceneReminder: (situation) =>
       `[ANCRAGE DE SCÈNE POUR CETTE RÉPLIQUE]\n${situation}\n` +
       `Interprète les sous-entendus de la dernière réplique à partir de ce fait ` +

@@ -263,6 +263,14 @@ function buildVolatileBlock(input: AssembleInput): string {
     volatileParts.push(a.sceneReminder(situation));
   }
 
+  // Même raison pour la fiche : une fois que le personnage s'est contredit
+  // (« on se connaît depuis deux mois ? »), ses propres répliques pèsent plus
+  // lourd que l'identité placée tout en haut. Le rappel clôt la requête.
+  const description = input.persona.description?.trim();
+  if (description) {
+    volatileParts.push(a.identityReminder(input.persona.name, description));
+  }
+
   return volatileParts.join("\n\n");
 }
 

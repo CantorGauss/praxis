@@ -224,6 +224,13 @@ export const enPrompts: PromptPack = {
       `Every character present knows this setting. Take it as given without ` +
       `reciting it, and do not contradict any of its elements.`,
 
+    identityReminder: (personaName, description) =>
+      `[WHO YOU ARE, ${personaName.toUpperCase()}]\n${description}\n` +
+      `This profile is authoritative on your past and your relationships. If ` +
+      `one of your earlier lines contradicted it, that was your mistake: own ` +
+      `it simply, without defending it or acting surprised. Do not recite ` +
+      `this reminder.`,
+
     sceneReminder: (situation) =>
       `[SCENE ANCHOR FOR THIS REPLY]\n${situation}\n` +
       `Interpret implications in the latest line from this established fact ` +

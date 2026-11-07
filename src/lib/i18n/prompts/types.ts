@@ -105,6 +105,12 @@ export type AssemblerPrompts = {
   startingSituation(situation: string): string;
   /** Rappel saillant placé juste avant la réponse, près de la dernière réplique. */
   sceneReminder(situation: string): string;
+  /**
+   * La fiche du personnage, rappelée juste avant la génération : face à ses
+   * propres répliques qui la contredisent, un petit modèle suit l'historique
+   * plutôt que le haut du prompt.
+   */
+  identityReminder(personaName: string, description: string): string;
   writingConventions(userName: string, userGender: Gender): string;
   /** Règle des apartés, en scène de groupe : dits au public, entendus de personne. */
   asides(): string;

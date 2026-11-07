@@ -292,6 +292,19 @@ describe("assemblePrompt", () => {
     expect(identity).toContain("Tu es calme et directe.");
   });
 
+  it("rappelle la fiche en fin de requête, pour corriger une contradiction passée", () => {
+    const result = assemblePrompt(
+      baseInput({
+        persona: persona({ description: "Parisienne de 24 ans, amie d'enfance de Jeff" }),
+      }),
+    );
+    const tail = result.messages.at(-1)!.content;
+    expect(tail).toContain("[QUI TU ES, ANNA]");
+    expect(tail).toContain("amie d'enfance de Jeff");
+    expect(tail).toContain("c'était une erreur de ta part");
+    expect(tail.indexOf("[QUI TU ES, ANNA]")).toBeGreaterThan(tail.indexOf("[CONTEXTE TEMPOREL]"));
+  });
+
   it("ne répète pas une fiche déjà contenue dans le prompt interne", () => {
     const result = assemblePrompt(
       baseInput({ persona: persona({ description: "calme et directe" }) }),
