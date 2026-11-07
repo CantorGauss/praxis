@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { actsForUser, cleanTwist, inventSceneTwist } from "../twist";
+import { actsForUser, cleanTwist, inventSceneTwist, unknownNames } from "../twist";
 import * as llm from "../llmClient";
 import { enPrompts, frPrompts } from "../../i18n/prompts";
 
@@ -69,6 +69,27 @@ describe("actsForUser", () => {
   });
 });
 
+describe("unknownNames", () => {
+  const known = "Anna : notaire\nJeff\nUn soir dans le salon d'Anna, à Paris.";
+
+  it("repère une personne qui n'existe pas dans la scène", () => {
+    expect(unknownNames(
+      "Une clé tourne dans la serrure ; la porte s'ouvre sur Marie, qui s'arrête net.",
+      known,
+    )).toEqual(["Marie"]);
+    expect(unknownNames("Le téléphone d'Anna affiche un message de Lucas.", known)).toEqual(["Lucas"]);
+  });
+
+  it("laisse passer les noms déjà connus, même élidés ou possessifs", () => {
+    expect(unknownNames("Le carnet d'Anna glisse vers Jeff.", known)).toEqual([]);
+    expect(unknownNames("The lights of Paris flicker behind Anna's back.", known)).toEqual([]);
+  });
+
+  it("ignore la majuscule de début de phrase", () => {
+    expect(unknownNames("Soudain, le four fume. Dehors, une sirène hurle.", known)).toEqual([]);
+  });
+});
+
 describe("inventSceneTwist", () => {
   const input = {
     connection: { id: "local", baseUrl: "http://localhost:8080/v1", allowRemoteHosts: false, timeoutMs: 1000 },
@@ -112,6 +133,23 @@ describe("inventSceneTwist", () => {
     const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue("La pluie cesse brusquement.");
     expect(await inventSceneTwist(input)).toBe("La pluie cesse brusquement.");
     expect(chat).toHaveBeenCalledTimes(3);
+  });
+
+  it("ne fait jamais entrer un personnage inconnu, même en repli", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion")
+      .mockResolvedValueOnce("La porte s'ouvre sur Marie, qui s'arrête net.")
+      .mockResolvedValueOnce("Le four de Marc se met à fumer.");
+    expect(await inventSceneTwist(input)).toBe("Le four de Marc se met à fumer.");
+    expect(chat).toHaveBeenCalledTimes(2);
+
+    chat.mockReset().mockResolvedValue("La porte s'ouvre sur Marie, qui s'arrête net.");
+    expect(await inventSceneTwist(input)).toBeNull();
+  });
+
+  it("interdit dans la consigne toute apparition hors des présents", async () => {
+    const chat = vi.spyOn(llm, "chatCompletion").mockResolvedValue("Le four se met à fumer.");
+    await inventSceneTwist(input);
+    expect(JSON.stringify(chat.mock.calls[0][1])).toContain("seuls les personnages présents peuvent agir ou apparaître");
   });
 
   it("garde le tirage déjà obtenu si une nouvelle tentative échoue", async () => {

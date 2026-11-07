@@ -392,7 +392,10 @@ export const frPrompts: PromptPack = {
       "plausible ;\n" +
       "- aucune réplique, aucun dialogue, aucun sentiment imposé à quiconque ;\n" +
       `- ne fais jamais agir ni parler ${userName} ;\n` +
-      "- n'introduis pas de nouveau personnage qui devrait prendre la parole ;\n" +
+      "- seuls les personnages présents peuvent agir ou apparaître : personne " +
+      "d'autre n'entre, ne surgit ni ne se montre, même sans parler. Une personne " +
+      "absente déjà nommée ne se manifeste que de loin (une nouvelle, une trace, " +
+      "un bruit) ; n'invente aucun nom de personne ;\n" +
       "- elle doit être intransposable : si elle pourrait figurer telle quelle " +
       "dans une autre histoire, trouve autre chose ;\n" +
       "- évite les accessoires passe-partout (lettre, enveloppe, billet, objet " +

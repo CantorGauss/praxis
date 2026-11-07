@@ -391,7 +391,10 @@ export const enPrompts: PromptPack = {
       "but plausible;\n" +
       "- no lines, no dialogue, no feelings imposed on anyone;\n" +
       `- never make ${userName} act or speak;\n` +
-      "- do not introduce a new character who would need to speak;\n" +
+      "- only the characters present may act or appear: nobody else enters, " +
+      "turns up or shows themselves, even silently. An absent person already " +
+      "named only makes themselves felt from afar (news, a trace, a sound); " +
+      "never invent a person's name;\n" +
       "- it must not be transferable: if it could appear unchanged in another " +
       "story, find something else;\n" +
       "- avoid stock props (a letter, an envelope, a note, something falling, " +

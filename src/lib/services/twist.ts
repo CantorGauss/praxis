@@ -94,6 +94,32 @@ export function actsForUser(twist: string, userName: string): boolean {
     && !new RegExp(`\\p{Ll}\\s+${name}\\s`, "u").test(twist);
 }
 
+/**
+ * Noms propres de la didascalie qui n'apparaissent nulle part dans la scène.
+ *
+ * L'imprévu ne doit faire entrer personne : un nom inconnu (« la porte s'ouvre
+ * sur Marie ») désigne un personnage qui n'existe pas, que les autres doivent
+ * alors inventer de toutes pièces. Seuls les mots capitalisés en milieu de
+ * phrase sont examinés : en tête de phrase, la majuscule ne dit rien.
+ *
+ * Exporté pour les tests.
+ */
+export function unknownNames(twist: string, knownText: string): string[] {
+  const unknown: string[] = [];
+  const token = /(?<![\p{L}\p{N}-])\p{Lu}[\p{L}\p{M}-]*/gu;
+  for (const match of twist.matchAll(token)) {
+    const name = match[0].replace(/-+$/, "");
+    if (name.length < 2) continue;
+    const before = twist.slice(0, match.index).replace(/[\s"«“(\[*_'’]+$/, "");
+    if (before === "" || /[.!?…:;—–]$/.test(before)) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`(?<![\\p{L}])${escaped}(?![\\p{L}])`, "u").test(knownText)) {
+      unknown.push(name);
+    }
+  }
+  return unknown;
+}
+
 export type TwistInput = {
   connection: ConnectionTarget;
   modelId: string;
@@ -138,6 +164,15 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
     .filter((m) => m.kind === "narration" && m.content.trim())
     .slice(-TWIST_MEMORY)
     .map((m) => m.content.trim());
+  // Tout ce que l'auteur a sous les yeux : un nom qui n'y figure pas est inventé.
+  const knownText = [
+    input.userName,
+    roster,
+    input.sceneDescription ?? "",
+    input.summary ?? "",
+    transcript,
+    ...previousTwists,
+  ].join("\n");
 
   // Une consigne négative ne suffit pas : le modèle ressert ses tics une fois
   // sur dix. Si tous les tirages y retombent, mieux vaut un imprévu imparfait
@@ -174,7 +209,9 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
         [...input.participants.map((p) => p.name), input.userName],
         pack,
       );
-      if (twist && !pack.twist.rejected.test(twist) && !actsForUser(twist, input.userName)) {
+      // Un inconnu qui entre n'est pas un tic mais une faute : jamais en repli.
+      if (!twist || unknownNames(twist, knownText).length > 0) continue;
+      if (!pack.twist.rejected.test(twist) && !actsForUser(twist, input.userName)) {
         return twist;
       }
       fallback ??= twist;
