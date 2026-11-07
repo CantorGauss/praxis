@@ -393,3 +393,12 @@ describe("updateSummary", () => {
     expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 });
+
+describe("consigne de résumé", () => {
+  it("garde le passé commun et l'identité des personnes sans fiche", () => {
+    const system = frPrompts.summary.system({ maxBullets: 22 });
+    expect(system).toContain("depuis quand les personnages se connaissent");
+    expect(system).toContain("n'a pas de fiche");
+    expect(system).toContain("« Marie, colocataire d'Anna »");
+  });
+});

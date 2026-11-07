@@ -521,7 +521,11 @@ export const enPrompts: PromptPack = {
       "where each person is, the state of important objects, relationships " +
       "and their shared past (how long the characters have known each other, " +
       "what they went through), even when only mentioned in passing, " +
-      "commitments and decisions. Each bullet fits in 25 words: keep the fact, " +
+      "commitments and decisions. A named person who is not a played " +
+      "character (a flatmate, an ex, a neighbour who turned up mid-scene) has " +
+      "no profile: this memory is all that says who they are. As long as they " +
+      "matter to the story, keep their identity and their link to the " +
+      "characters (\"Marie, Anna's flatmate\"). Each bullet fits in 25 words: keep the fact, " +
       "not the story of how it came about. Rather than lose a fact, merge it " +
       "with a neighbouring one. A fact is what actually happened: do not confuse it " +
       "with what characters say, order, plan or believe. An order is not " +

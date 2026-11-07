@@ -527,7 +527,12 @@ export const frPrompts: PromptPack = {
       "et à qui ils appartiennent, où se trouve chacun, l'état des objets " +
       "importants, les relations et leur passé commun (depuis quand les " +
       "personnages se connaissent, ce qu'ils ont vécu), même évoqués en passant " +
-      "dans une réplique, les engagements et les décisions. Chaque puce " +
+      "dans une réplique, les engagements et les décisions. Une personne " +
+      "nommée qui n'est pas un personnage joué (un colocataire, un ex, un " +
+      "voisin apparu en cours de scène) n'a pas de fiche : cette mémoire est " +
+      "tout ce qui dit qui elle est. Tant qu'elle compte dans l'histoire, garde " +
+      "son identité et son lien avec les personnages (« Marie, colocataire " +
+      "d'Anna »). Chaque puce " +
       "tient en 25 mots : garde le fait, pas le récit de la façon dont il est " +
       "arrivé. Plutôt que de perdre un fait, fusionne-le avec un fait voisin. " +
       "Un fait est ce qui " +
