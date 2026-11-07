@@ -170,8 +170,14 @@ export const enPrompts: PromptPack = {
   },
 
   assembler: {
-    identity: (personaName, systemPrompt) =>
-      `[IDENTITY]\nYou are ${personaName}.\n${systemPrompt}`,
+    identity: (personaName, systemPrompt, description) =>
+      `[IDENTITY]\nYou are ${personaName}.\n` +
+      (description
+        ? `Your profile, known to everyone: ${description}\n` +
+          `These facts, and the relationships with others they mention, are ` +
+          `long established: you know them and never contradict them.\n`
+        : "") +
+      systemPrompt,
 
     humanInterlocutor: (userName, userGender) =>
       `[HUMAN INTERLOCUTOR]\n` +
@@ -502,7 +508,9 @@ export const enPrompts: PromptPack = {
       "not mention it. Silence never removes a fact; only a new message that " +
       "contradicts it or makes it obsolete replaces it. It covers completed " +
       "events, revelations and who knows them, places and who they belong to, " +
-      "where each person is, the state of important objects, relationships, " +
+      "where each person is, the state of important objects, relationships " +
+      "and their shared past (how long the characters have known each other, " +
+      "what they went through), even when only mentioned in passing, " +
       "commitments and decisions. Each bullet fits in 25 words: keep the fact, " +
       "not the story of how it came about. Rather than lose a fact, merge it " +
       "with a neighbouring one. A fact is what actually happened: do not confuse it " +

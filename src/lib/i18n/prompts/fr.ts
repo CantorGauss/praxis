@@ -169,8 +169,14 @@ export const frPrompts: PromptPack = {
   },
 
   assembler: {
-    identity: (personaName, systemPrompt) =>
-      `[IDENTITÉ]\nTu es ${personaName}.\n${systemPrompt}`,
+    identity: (personaName, systemPrompt, description) =>
+      `[IDENTITÉ]\nTu es ${personaName}.\n` +
+      (description
+        ? `Ta fiche, connue de tous : ${description}\n` +
+          `Ces faits, et tes liens avec les autres qu'elle mentionne, sont ` +
+          `établis de longue date : tu les connais et ne les contredis pas.\n`
+        : "") +
+      systemPrompt,
 
     humanInterlocutor: (userName, userGender) =>
       `[INTERLOCUTEUR HUMAIN]\n` +
@@ -509,7 +515,9 @@ export const frPrompts: PromptPack = {
       "nouveau message qui le contredit ou le rend caduc le remplace. Y figurent " +
       "les événements accomplis, les révélations et qui les connaît, les lieux " +
       "et à qui ils appartiennent, où se trouve chacun, l'état des objets " +
-      "importants, les relations, les engagements et les décisions. Chaque puce " +
+      "importants, les relations et leur passé commun (depuis quand les " +
+      "personnages se connaissent, ce qu'ils ont vécu), même évoqués en passant " +
+      "dans une réplique, les engagements et les décisions. Chaque puce " +
       "tient en 25 mots : garde le fait, pas le récit de la façon dont il est " +
       "arrivé. Plutôt que de perdre un fait, fusionne-le avec un fait voisin. " +
       "Un fait est ce qui " +

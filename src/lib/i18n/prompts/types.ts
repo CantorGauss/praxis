@@ -90,7 +90,12 @@ export type SceneBlockText = {
 };
 
 export type AssemblerPrompts = {
-  identity(personaName: string, systemPrompt: string): string;
+  /**
+   * `description` est la fiche publique du personnage : les autres la voient,
+   * lui doit donc la connaître aussi — elle porte souvent ses liens avec
+   * l'humain (« amie d'enfance de Jeff »).
+   */
+  identity(personaName: string, systemPrompt: string, description?: string | null): string;
   humanInterlocutor(userName: string, userGender: Gender): string;
   stableTraits(traits: string[]): string;
   responseLength(instruction: string): string;

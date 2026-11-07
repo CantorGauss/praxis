@@ -278,6 +278,27 @@ describe("assemblePrompt", () => {
     expect(result.system).toContain("identifiant de machine");
   });
 
+  it("donne au personnage sa propre fiche, qui porte ses liens avec l'humain", () => {
+    const result = assemblePrompt(
+      baseInput({
+        persona: persona({ description: "Parisienne de 24 ans, amie d'enfance de Jeff" }),
+      }),
+    );
+    const identity = result.system.slice(
+      result.system.indexOf("[IDENTITÉ]"),
+      result.system.indexOf("[INTERLOCUTEUR HUMAIN]"),
+    );
+    expect(identity).toContain("amie d'enfance de Jeff");
+    expect(identity).toContain("Tu es calme et directe.");
+  });
+
+  it("ne répète pas une fiche déjà contenue dans le prompt interne", () => {
+    const result = assemblePrompt(
+      baseInput({ persona: persona({ description: "calme et directe" }) }),
+    );
+    expect(result.system).not.toContain("Ta fiche");
+  });
+
   it("demande plusieurs phrases naturelles pour une réponse brève", () => {
     const result = assemblePrompt(
       baseInput({ persona: persona({ maxOutputTokens: 512 }) }),

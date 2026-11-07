@@ -131,7 +131,15 @@ function buildSystemPrompt(
     pack.scene.userLabel;
   const userGender = input.userGender ?? input.scene?.userGender ?? "neutral";
 
-  parts.push(a.identity(persona.name, persona.systemPrompt.trim()));
+  // La fiche publique est montrée aux autres personnages ; sans elle, le
+  // personnage ignore ce que tout le monde sait de lui et improvise ses
+  // propres liens (« on se connaît depuis deux mois ? » face à une amie
+  // d'enfance).
+  const systemPrompt = persona.systemPrompt.trim();
+  const description = persona.description?.trim() || null;
+  const ownDescription =
+    description && !systemPrompt.includes(description) ? description : null;
+  parts.push(a.identity(persona.name, systemPrompt, ownDescription));
   parts.push(a.humanInterlocutor(userName, userGender));
 
   if (persona.stableTraits.length > 0) {
