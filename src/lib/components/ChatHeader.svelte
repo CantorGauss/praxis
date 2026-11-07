@@ -2,11 +2,8 @@
   import { tick } from "svelte";
   import { app } from "../state/appState.svelte";
   import Avatar from "./Avatar.svelte";
+  import MemoryPanel from "./MemoryPanel.svelte";
   import { formatNumber, t } from "../i18n/ui.svelte";
-  import {
-    KEEP_RECENT_MESSAGES,
-    SUMMARY_FORMAT_MARKER,
-  } from "../services/summaryService";
   import {
     effectiveMaxOutputTokens,
     responseLengthPreset,
@@ -20,26 +17,9 @@
   let showMore = $state(false);
   let summaryForConversationId = $state<string | null>(null);
 
-  const currentSummary = $derived(
-    (app.currentConversation?.summary ?? "")
-      .replace(SUMMARY_FORMAT_MARKER, "")
-      .trim(),
-  );
   const summaryOpen = $derived(
     Boolean(app.currentConversationId) &&
       summaryForConversationId === app.currentConversationId,
-  );
-  const summarizedMessageCount = $derived.by(() => {
-    const boundary = app.currentConversation?.summaryThroughMessageId;
-    if (!boundary) return 0;
-    const index = app.messages.findIndex((message) => message.id === boundary);
-    return index < 0 ? 0 : index + 1;
-  });
-  const recentMemoryMessageCount = $derived(
-    app.messages.length - summarizedMessageCount,
-  );
-  const canCreateSummary = $derived(
-    app.messages.length > KEEP_RECENT_MESSAGES,
   );
   const contextBudget = $derived.by(() => {
     const prompt = app.lastPromptTokens;
@@ -166,7 +146,7 @@
             </label>
           {/if}
           <button class="menu-row" bind:this={summaryButtonEl} onclick={openSummary}>
-            <span>{s.chat.conversationSummary}</span><span>›</span>
+            <span>{s.chat.sceneMemory}</span><span>›</span>
           </button>
           <button class="menu-row" onclick={() => (showInference = !showInference)}>
             <span>{s.chat.temperature}</span><strong>{(app.temperatureOverride ?? app.activePersona?.temperature ?? 0.7).toFixed(2)}</strong>
@@ -218,62 +198,7 @@
   </header>
 
   {#if summaryOpen}
-    <div class="summary-overlay">
-      <button
-        class="summary-scrim"
-        aria-label={s.chat.closeSummary}
-        onclick={closeSummary}
-      ></button>
-      <div
-        class="summary-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="summary-title"
-        tabindex="-1"
-        bind:this={summarySheetEl}
-      >
-        <header>
-          <div>
-            <span class="summary-kicker">{s.chat.condensedMemory}</span>
-            <h2 id="summary-title">{s.chat.conversationSummary}</h2>
-          </div>
-          <button class="summary-close" onclick={closeSummary} aria-label={s.common.close}>
-            ✕
-          </button>
-        </header>
-        <p class="summary-explanation">{s.chat.summaryExplanation}</p>
-        {#if currentSummary}
-          <div class="summary-text">{currentSummary}</div>
-        {:else}
-          <div class="summary-empty">
-            <strong>{s.chat.noSummaryYet}</strong>
-            <p>{s.chat.noSummaryBody}</p>
-          </div>
-        {/if}
-        <footer class="summary-actions">
-          <span>
-            {#if currentSummary}
-              {s.chat.summaryCounts(summarizedMessageCount, recentMemoryMessageCount)}
-            {:else if canCreateSummary}
-              {s.chat.summaryAvailableFrom(app.messages.length)}
-            {:else}
-              {s.chat.summaryAvailableAfter(KEEP_RECENT_MESSAGES)}
-            {/if}
-          </span>
-          <button
-            class="btn"
-            disabled={app.summarizing || app.turnInProgress || !canCreateSummary}
-            onclick={() => void app.regenerateSummary()}
-          >
-            {app.summarizing
-              ? s.chat.generating
-              : currentSummary
-                ? s.chat.regenerateSummary
-                : s.chat.createSummary}
-          </button>
-        </footer>
-      </div>
-    </div>
+    <MemoryPanel onclose={closeSummary} bind:sheet={summarySheetEl} />
   {/if}
 
   {#if app.summarizing}
@@ -563,130 +488,6 @@
     margin-top: 2px;
     color: var(--text-faint);
     line-height: 1.35;
-  }
-
-  .summary-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 40;
-    display: grid;
-    place-items: center;
-    padding: 28px;
-  }
-
-  .summary-scrim {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: rgba(7, 4, 8, 0.76);
-    backdrop-filter: blur(5px);
-    cursor: default;
-  }
-
-  .summary-sheet {
-    position: relative;
-    width: min(680px, 100%);
-    max-height: min(72vh, 720px);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid rgba(197, 149, 75, 0.28);
-    border-radius: 16px;
-    background: var(--summary-bg);
-    box-shadow: 0 32px 90px rgba(0, 0, 0, 0.72);
-  }
-
-  .summary-sheet > header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 24px;
-    padding: 22px 24px 15px;
-    border-bottom: 1px solid var(--border-soft);
-  }
-
-  .summary-kicker {
-    color: var(--accent);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .summary-sheet h2 {
-    margin: 5px 0 0;
-    color: var(--text);
-    font-family: var(--font-stage);
-    font-size: 22px;
-    font-weight: 600;
-  }
-
-  .summary-close {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    color: var(--text-soft);
-    background: color-mix(in srgb, var(--text) 4%, transparent);
-  }
-
-  .summary-explanation {
-    margin: 0;
-    padding: 15px 24px;
-    color: var(--text-faint);
-    font-size: 12px;
-    line-height: 1.5;
-    border-bottom: 1px solid var(--border-soft);
-  }
-
-  .summary-text {
-    overflow-y: auto;
-    padding: 22px 24px 28px;
-    color: var(--text-soft);
-    font-family: var(--font-stage);
-    font-size: 15px;
-    line-height: 1.72;
-    white-space: pre-wrap;
-  }
-
-  .summary-empty {
-    padding: 34px 24px;
-    text-align: center;
-    color: var(--text-soft);
-  }
-
-  .summary-empty strong {
-    display: block;
-    margin-bottom: 7px;
-    color: var(--text);
-    font-family: var(--font-stage);
-    font-size: 17px;
-  }
-
-  .summary-empty p {
-    max-width: 52ch;
-    margin: 0 auto;
-    font-size: 12.5px;
-  }
-
-  .summary-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 13px 18px;
-    border-top: 1px solid var(--border-soft);
-    color: var(--text-faint);
-    font-size: 11.5px;
-  }
-
-  .summary-actions .btn {
-    flex: 0 0 auto;
   }
 
 </style>

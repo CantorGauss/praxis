@@ -64,25 +64,30 @@ describe("knowledgeFor", () => {
     { personaId: "marc", enteredAt: at(4), leftAt: null },
   ];
 
-  it("donne le résumé et les messages non couverts à qui était là", () => {
+  it("donne l'état, l'archive et les messages non couverts à qui était là", () => {
     const k = knowledgeFor(history, spans, "anna", "3");
-    expect(k.summaryKnown).toBe(true);
+    expect(k.stateKnown).toBe(true);
+    expect(k.archive.map((m) => m.id)).toEqual(["1", "2", "3"]);
     expect(k.recent.map((m) => m.id)).toEqual(["4", "5", "6"]);
   });
 
-  it("retire le résumé à qui n'a pas tout vu, et lui rend ce qu'il a vu", () => {
+  it("retire l'état à qui n'a pas tout vu, mais lui laisse ce qu'il a vu", () => {
     const k = knowledgeFor(history, spans, "marc", "4");
-    expect(k.summaryKnown).toBe(false);
+    expect(k.stateKnown).toBe(false);
     expect(k.missedSome).toBe(true);
-    expect(k.recent.map((m) => m.id)).toEqual(["4", "5", "6"]);
+    // Le message 4, versé en mémoire, reste retrouvable dans son archive.
+    expect(k.archive.map((m) => m.id)).toEqual(["4"]);
+    expect(k.recent.map((m) => m.id)).toEqual(["5", "6"]);
+    expect(k.seenIds.has("4")).toBe(true);
+    expect(k.seenIds.has("3")).toBe(false);
   });
 
-  it("garde le résumé quand il ne couvre que des messages vus", () => {
+  it("garde l'état quand la mémoire ne couvre que des messages vus", () => {
     const late: PresenceSpan[] = [
       { personaId: "anna", enteredAt: null, leftAt: at(5) },
     ];
     const k = knowledgeFor(history, late, "anna", "3");
-    expect(k.summaryKnown).toBe(true);
+    expect(k.stateKnown).toBe(true);
     expect(k.missedSome).toBe(true);
     expect(k.recent.map((m) => m.id)).toEqual(["4", "5"]);
   });

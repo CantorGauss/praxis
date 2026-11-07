@@ -104,10 +104,15 @@ Four ready-made characters are there if you'd rather edit than start blank.
 
 ![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
-**Long conversations don't get slow.** Past a certain point, older messages get
-condensed into a working memory instead of being dropped or dragged along
-whole. You can open it, read exactly what the characters are being told, and
-regenerate it if it's gone stale.
+**Long conversations don't get slow, or lose the plot.** Past a certain point,
+older messages are read into a ledger of facts: relationships, events, secrets,
+promises, who is where. Each fact is kept on its own and only goes when the
+scene contradicts it, so nothing quietly falls out of memory as the evening
+drags on. A character only knows the facts established in front of them. When
+the scene comes back to something old — a name, an object, a promise — the
+original lines are found again and handed back word for word. Open **Scene
+memory** to read the ledger, correct a fact, add your own, or pin what must
+never be forgotten: pinned facts are restated right before every line.
 
 **Two languages, deliberately unlinked.** The app speaks English or French. The
 characters speak English or French. Separately — because the prompt language is

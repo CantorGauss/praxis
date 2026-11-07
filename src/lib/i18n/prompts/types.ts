@@ -1,4 +1,4 @@
-import type { DayPeriod, Gender, Mood } from "../../types";
+import type { DayPeriod, Gender, MemoryCategory, Mood } from "../../types";
 import type { Locale } from "../locales";
 
 /**
@@ -23,7 +23,7 @@ export type PromptPack = {
     analysisSystem: string;
     context(data: string): string;
   };
-  summary: SummaryPrompts;
+  memory: MemoryPrompts;
   emotion: EmotionPrompts;
   temporal: TemporalPrompts;
   inference: InferencePrompts;
@@ -116,7 +116,22 @@ export type AssemblerPrompts = {
   asides(): string;
   /** Invitation ponctuelle à en glisser un, placée en fin de requête. */
   asideNudge(): string;
-  conversationSummary(summary: string): string;
+  /**
+   * Registre des faits connus du personnage, regroupés par catégorie.
+   * `pinned` : les faits que l'utilisateur tient pour essentiels.
+   */
+  sceneMemory(input: {
+    pinned: string[];
+    groups: { label: string; facts: string[] }[];
+    /** Des faits moins pertinents ont été laissés de côté faute de place. */
+    partial: boolean;
+  }): string;
+  /** Instantané de la scène à la frontière de la mémoire. */
+  sceneState(input: { state: string[]; threads: string[] }): string;
+  /** Extraits exacts retrouvés plus tôt dans la scène, placés juste avant la réponse. */
+  recalledPassages(passages: string[]): string;
+  /** Les faits épinglés, rappelés juste avant la génération. */
+  pinnedReminder(facts: string[]): string;
   /** Le personnage n'a pas assisté à toute la scène : il ignore ce qu'il a manqué. */
   partialPresence(): string;
   immediateReaction(input: {
@@ -198,19 +213,28 @@ export type ReviewPrompts = {
   }): string;
 };
 
-export type SummaryPrompts = {
-  system(input: { maxBullets: number }): string;
+export type MemoryPrompts = {
+  /** Consigne d'extraction : le modèle ne renvoie que des opérations en JSON. */
+  system: string;
   user(input: {
-    previousSummary: string | null;
+    /** Registre courant, une ligne par fait : « f3 [event] … ». */
+    facts: string[];
+    /** Faits du registre laissés de côté faute de place. */
+    omittedFacts: number;
+    state: string[];
+    threads: string[];
+    /** Nouveaux messages numérotés : « [1] Anna : … ». */
     newMessages: string;
-    /** La mémoire est pleine : le modèle doit condenser ses faits anciens. */
-    compact?: boolean;
   }): string;
-  /** Ligne d'un message soumis au résumé. */
+  /** Ligne d'un message soumis à l'extraction. */
   messageLine(name: string, content: string): string;
-  emptySummaryError: string;
-  truncatedSummaryError: string;
-  stalledSummaryError: string;
+  categoryLabels: Record<MemoryCategory, string>;
+  stateLabel: string;
+  threadsLabel: string;
+  /** « Relations : » / "Relationships:". */
+  heading(label: string): string;
+  invalidUpdateError: string;
+  stalledError: string;
 };
 
 export type EmotionPrompts = {

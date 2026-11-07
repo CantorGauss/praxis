@@ -1,6 +1,8 @@
 import type {
   EmotionalReaction,
   EmotionalState,
+  MemoryCategory,
+  MemoryFact,
   Message,
   Persona,
   TemporalContext,
@@ -10,6 +12,7 @@ import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
 import { publicText } from "./messageFormat";
+import { rankByRelevance, recallPassages, type RecallDocument } from "./recall";
 import {
   buildSceneBlock,
   renderTranscript,
@@ -73,7 +76,16 @@ export type AssembleInput = {
   /** Réaction au dernier événement, évaluée juste avant cette réponse. */
   immediateReaction?: EmotionalReaction | null;
   temporal: TemporalContext;
-  summary: string | null;
+  /**
+   * Mémoire de scène connue de ce personnage : faits qu'il a vu établir,
+   * et l'état de la scène s'il a assisté à tout ce qu'elle couvre.
+   */
+  memory?: PromptMemory | null;
+  /**
+   * Messages vus par le personnage avant la fenêtre récente. Les passages en
+   * rapport avec la réplique en cours y sont recherchés et rappelés tels quels.
+   */
+  archive?: Message[];
   coordination?: string;
   /** La scène tourne en rond : une consigne de relance clôt la requête. */
   stagnation?: StagnationReason | null;
@@ -94,11 +106,28 @@ export type AssembleInput = {
   pack?: PromptPack;
 };
 
+export type PromptMemory = {
+  facts: MemoryFact[];
+  state: string[];
+  threads: string[];
+};
+
+/** Part du contexte que peut occuper le registre de faits. */
+export const MEMORY_FACTS_CONTEXT_RATIO = 0.25;
+/** Part du contexte réservée aux souvenirs retrouvés, et son plafond absolu. */
+export const RECALL_CONTEXT_RATIO = 0.1;
+export const RECALL_MAX_TOKENS = 1000;
+/** Répliques récentes qui servent de requête pour retrouver les souvenirs. */
+const RECALL_QUERY_WEIGHTS = [1, 1, 1.5, 2.5];
+
 export type AssembledPrompt = {
   system: string;
   messages: ChatMessage[];
   includedMessageCount: number;
-  summaryIncluded: boolean;
+  memoryIncluded: boolean;
+  /** Faits du registre effectivement transmis. */
+  factCount: number;
+  recalledPassageCount: number;
   estimatedTokens: number;
   error: string | null;
 };
@@ -119,9 +148,9 @@ export type AssembledPrompt = {
  */
 function buildSystemPrompt(
   input: AssembleInput,
-  includeSummary: boolean,
+  memoryBlocks: string[],
 ): string {
-  const { persona, summary } = input;
+  const { persona } = input;
   const pack = input.pack ?? DEFAULT_PROMPT_PACK;
   const a = pack.assembler;
   const parts: string[] = [];
@@ -189,9 +218,7 @@ function buildSystemPrompt(
     parts.push(a.asides());
   }
 
-  if (includeSummary && summary) {
-    parts.push(a.conversationSummary(stripSummaryMarkers(summary)));
-  }
+  parts.push(...memoryBlocks);
 
   if (input.missedEarlier) {
     parts.push(a.partialPresence());
@@ -263,6 +290,13 @@ function buildVolatileBlock(input: AssembleInput): string {
     volatileParts.push(a.sceneReminder(situation));
   }
 
+  // Les faits que l'utilisateur a épinglés valent la fiche : ils sont
+  // rappelés au plus près de la génération, là où ils pèsent le plus.
+  const pinned = input.memory?.facts.filter((f) => f.pinned) ?? [];
+  if (pinned.length > 0) {
+    volatileParts.push(a.pinnedReminder(pinned.map((f) => f.text)));
+  }
+
   // Même raison pour la fiche : une fois que le personnage s'est contredit
   // (« on se connaît depuis deux mois ? »), ses propres répliques pèsent plus
   // lourd que l'identité placée tout en haut. Le rappel clôt la requête.
@@ -274,24 +308,88 @@ function buildVolatileBlock(input: AssembleInput): string {
   return volatileParts.join("\n\n");
 }
 
+/** Requête de rappel : les dernières répliques, la plus récente pesant le plus. */
+function recallQuery(messages: readonly ChatMessage[]): { text: string; weight: number }[] {
+  const lastOnes = messages.slice(-RECALL_QUERY_WEIGHTS.length);
+  const weights = RECALL_QUERY_WEIGHTS.slice(-lastOnes.length);
+  return lastOnes.map((m, i) => ({ text: m.content, weight: weights[i] }));
+}
+
+/**
+ * Les blocs de mémoire du message système. Si le registre dépasse sa part
+ * du contexte, on garde les faits épinglés puis les plus pertinents pour la
+ * scène en cours, dans leur ordre d'origine.
+ */
+function buildMemoryBlocks(
+  memory: PromptMemory | null | undefined,
+  query: { text: string; weight: number }[],
+  factBudget: number,
+  pack: PromptPack,
+): { blocks: string[]; factCount: number } {
+  if (!memory) return { blocks: [], factCount: 0 };
+  const a = pack.assembler;
+  const blocks: string[] = [];
+  let facts = memory.facts;
+  let partial = false;
+
+  const cost = (list: readonly MemoryFact[]) =>
+    list.reduce((acc, f) => acc + estimateTokens(f.text) + 2, 0);
+  if (cost(facts) > factBudget) {
+    partial = true;
+    const scores = rankByRelevance(
+      facts.map((f) => f.text),
+      query,
+    );
+    const keep = new Set<number>();
+    let used = 0;
+    facts.forEach((f, i) => {
+      if (f.pinned) {
+        keep.add(i);
+        used += estimateTokens(f.text) + 2;
+      }
+    });
+    // À pertinence égale, le fait le plus récent l'emporte.
+    const order = facts
+      .map((_, i) => i)
+      .filter((i) => !keep.has(i))
+      .sort((x, y) => scores[y] - scores[x] || y - x);
+    for (const i of order) {
+      const c = estimateTokens(facts[i].text) + 2;
+      if (used + c > factBudget) continue;
+      keep.add(i);
+      used += c;
+    }
+    facts = facts.filter((_, i) => keep.has(i));
+  }
+
+  if (facts.length > 0) {
+    const labels: Record<MemoryCategory, string> = pack.memory.categoryLabels;
+    const pinned = facts.filter((f) => f.pinned).map((f) => f.text);
+    const groups = (Object.keys(labels) as MemoryCategory[])
+      .map((category) => ({
+        label: labels[category],
+        facts: facts.filter((f) => !f.pinned && f.category === category).map((f) => f.text),
+      }))
+      .filter((g) => g.facts.length > 0);
+    blocks.push(a.sceneMemory({ pinned, groups, partial }));
+  }
+  if (memory.state.length > 0 || memory.threads.length > 0) {
+    blocks.push(a.sceneState({ state: memory.state, threads: memory.threads }));
+  }
+  return { blocks, factCount: facts.length };
+}
+
 /**
  * Assemble le prompt final dans un ordre déterministe en respectant le budget.
- * Le prompt de persona est toujours conservé ; le résumé vient ensuite ; les
- * messages récents remplissent le reste, du plus récent au plus ancien.
- * Le dernier message utilisateur n'est jamais tronqué.
+ * Le prompt de persona est toujours conservé ; la mémoire de scène vient
+ * ensuite ; les messages récents remplissent le reste, du plus récent au plus
+ * ancien ; les souvenirs retrouvés dans les messages plus anciens closent la
+ * requête. Le dernier message n'est jamais tronqué.
  */
 export function assemblePrompt(input: AssembleInput): AssembledPrompt {
   const pack = input.pack ?? DEFAULT_PROMPT_PACK;
   const volatileBlock = buildVolatileBlock(input);
-  // Le bloc volatile occupe de la place et clôt la requête : il est réservé
-  // sur le budget au même titre que la réponse attendue.
-  const budget =
-    input.contextTokens - input.reserveOutputTokens - estimateTokens(volatileBlock);
-  const withSummary = buildSystemPrompt(input, true);
-  const withoutSummary = buildSystemPrompt(input, false);
 
-  let system = withSummary;
-  let summaryIncluded = Boolean(input.summary);
   const usable = input.recentMessages.filter(
     (m) => m.content.trim().length > 0 && m.status !== "error",
   );
@@ -314,18 +412,50 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
         .filter((m) => m.content.trim().length > 0);
   const last = messages[messages.length - 1];
   const lastTokens = last ? estimateTokens(last.content) + 8 : 0;
+  const query = recallQuery(messages);
 
-  // Le système + le dernier message utilisateur doivent tenir, sinon erreur.
-  if (estimateTokens(withSummary) + lastTokens > budget) {
-    system = withoutSummary;
-    summaryIncluded = false;
-    if (estimateTokens(withoutSummary) + lastTokens > budget) {
+  // Les souvenirs ne sont cherchés qu'au-delà de ce qui est transmis en clair ;
+  // leur place est réservée d'avance, comme celle de la réponse.
+  const archive = (input.archive ?? []).filter(
+    (m) => m.content.trim().length > 0 && m.status !== "error",
+  );
+  const recallBudget = Math.min(
+    RECALL_MAX_TOKENS,
+    Math.floor(input.contextTokens * RECALL_CONTEXT_RATIO),
+  );
+  // Le bloc volatile occupe de la place et clôt la requête : il est réservé
+  // sur le budget au même titre que la réponse attendue.
+  const baseBudget =
+    input.contextTokens - input.reserveOutputTokens - estimateTokens(volatileBlock);
+  const budget = baseBudget - (archive.length > 0 ? recallBudget : 0);
+
+  const memory = buildMemoryBlocks(
+    input.memory,
+    query,
+    Math.floor(input.contextTokens * MEMORY_FACTS_CONTEXT_RATIO),
+    pack,
+  );
+  const withMemory = buildSystemPrompt(input, memory.blocks);
+  const withoutMemory = buildSystemPrompt(input, []);
+
+  let system = withMemory;
+  let memoryIncluded = memory.blocks.length > 0;
+  let factCount = memory.factCount;
+
+  // Le système + le dernier message doivent tenir, sinon erreur.
+  if (estimateTokens(withMemory) + lastTokens > budget) {
+    system = withoutMemory;
+    memoryIncluded = false;
+    factCount = 0;
+    if (estimateTokens(withoutMemory) + lastTokens > baseBudget) {
       return {
-        system: withoutSummary,
+        system: withoutMemory,
         messages: [],
         includedMessageCount: 0,
-        summaryIncluded: false,
-        estimatedTokens: estimateTokens(withoutSummary) + lastTokens,
+        memoryIncluded: false,
+        factCount: 0,
+        recalledPassageCount: 0,
+        estimatedTokens: estimateTokens(withoutMemory) + lastTokens,
         error: pack.assembler.contextTooLong,
       };
     }
@@ -335,34 +465,73 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
   const included: ChatMessage[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const cost = estimateTokens(messages[i].content) + 8;
-    if (used + cost > budget) break;
+    // Le dernier message passe toujours ; la réserve des souvenirs lui cède la place.
+    const limit = i === messages.length - 1 ? baseBudget : budget;
+    if (used + cost > limit) break;
     included.unshift(messages[i]);
     used += cost;
   }
+
+  // Souvenirs : archive et répliques récentes qui n'ont pas tenu dans le budget.
+  const label =
+    input.scene?.label ??
+    ((m: Message) =>
+      m.role === "user"
+        ? input.userName?.trim() || pack.scene.userLabel
+        : (m.personaName ?? input.persona.name));
+  const speakerId = input.scene?.speakerId ?? input.persona.id;
+  const documents: RecallDocument[] = archive
+    .map((m, order) => ({
+      order,
+      // Ses propres apartés, le personnage s'en souvient ; pas de ceux des autres.
+      text: pack.memory.messageLine(
+        label(m),
+        m.personaId === speakerId ? m.content : publicText(m.content),
+      ),
+    }))
+    .filter((d) => publicText(d.text).trim().length > 0);
+  const dropped = messages.slice(0, messages.length - included.length);
+  dropped.forEach((m, i) => documents.push({ order: archive.length + i, text: m.content }));
+  const remaining = Math.max(0, baseBudget - used);
+  const passages = recallPassages({
+    documents,
+    query,
+    budgetTokens: Math.min(recallBudget, remaining),
+    estimateTokens,
+  });
+
+  const tailBlock = [
+    passages.length > 0 ? pack.assembler.recalledPassages(passages) : "",
+    volatileBlock,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   // Le bloc volatile clôt la requête, après l'historique. Il est fusionné avec
   // le dernier message quand celui-ci vient de l'utilisateur, pour ne pas
   // produire deux tours `user` consécutifs — certains gabarits de chat
   // exigent l'alternance stricte.
   const tail: ChatMessage[] = [];
-  if (volatileBlock) {
+  if (tailBlock) {
     const lastIncluded = included[included.length - 1];
     if (lastIncluded && lastIncluded.role === "user") {
       included[included.length - 1] = {
         role: "user",
-        content: `${lastIncluded.content}\n\n${volatileBlock}`,
+        content: `${lastIncluded.content}\n\n${tailBlock}`,
       };
     } else {
-      tail.push({ role: "user", content: volatileBlock });
+      tail.push({ role: "user", content: tailBlock });
     }
-    used += estimateTokens(volatileBlock);
+    used += estimateTokens(tailBlock);
   }
 
   return {
     system,
     messages: [{ role: "system", content: system }, ...included, ...tail],
     includedMessageCount: included.length,
-    summaryIncluded,
+    memoryIncluded,
+    factCount,
+    recalledPassageCount: passages.length,
     estimatedTokens: used,
     error: null,
   };

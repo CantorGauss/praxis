@@ -44,50 +44,51 @@ export function witnessedBy(
   return { messages: seen, missedSome: seen.length < messages.length };
 }
 
-/** L'historique à transmettre à un personnage, et s'il peut recevoir le résumé. */
+/** Ce qu'un personnage sait de la scène, découpé pour le prompt. */
 export type SpeakerKnowledge = {
-  /** Tout ce que le personnage a vu, résumé ou non. */
+  /** Tout ce que le personnage a vu, versé en mémoire ou non. */
   seen: Message[];
-  /** Messages en clair, du plus ancien au plus récent. */
+  /** Identifiants de `seen` : décident quels faits du registre il connaît. */
+  seenIds: Set<string>;
+  /** Messages en clair, pas encore versés en mémoire, du plus ancien au plus récent. */
   recent: Message[];
-  /** Le résumé ne couvre que des messages vus par ce personnage. */
-  summaryKnown: boolean;
+  /** Messages vus déjà versés en mémoire : on y cherche les souvenirs à rappeler. */
+  archive: Message[];
+  /**
+   * L'état de la scène est commun à tous : seul un personnage qui a assisté à
+   * tout ce que couvre la mémoire le reçoit.
+   */
+  stateKnown: boolean;
   missedSome: boolean;
 };
 
 /**
- * Le résumé est commun à toute la scène. Un personnage qui n'a pas assisté à
- * tout ce qu'il couvre ne le reçoit pas : il retrouve à la place, en clair,
- * tout ce qu'il a vu — le budget de contexte garde les plus récents.
+ * Chaque personnage garde ce qu'il a vu : les faits établis devant lui (via
+ * `seenIds`), et les messages anciens auxquels il a assisté (via `archive`).
+ * Auparavant, un personnage arrivé en cours de scène perdait tout le résumé,
+ * y compris ce qui s'était dit en sa présence.
  */
 export function knowledgeFor(
   messages: Message[],
   spans: PresenceSpan[],
   personaId: string,
-  summaryThroughMessageId: string | null,
+  memoryThroughMessageId: string | null,
 ): SpeakerKnowledge {
   const { messages: seen, missedSome } = witnessedBy(messages, spans, personaId);
-  const through = summaryThroughMessageId
-    ? messages.findIndex((m) => m.id === summaryThroughMessageId)
-    : -1;
-  const uncovered = (list: Message[]) => {
-    const idx = list.findIndex((m) => m.id === summaryThroughMessageId);
-    return idx === -1 ? list : list.slice(idx + 1);
-  };
-
-  if (!missedSome) {
-    return { seen, recent: uncovered(messages), summaryKnown: true, missedSome };
-  }
-  if (!summaryThroughMessageId) {
-    return { seen, recent: seen, summaryKnown: true, missedSome };
-  }
   const seenIds = new Set(seen.map((m) => m.id));
-  const summaryKnown =
-    through !== -1 && messages.slice(0, through + 1).every((m) => seenIds.has(m.id));
+  const through = memoryThroughMessageId
+    ? messages.findIndex((m) => m.id === memoryThroughMessageId)
+    : -1;
+  if (through === -1) {
+    return { seen, seenIds, recent: seen, archive: [], stateKnown: true, missedSome };
+  }
+  const covered = new Set(messages.slice(0, through + 1).map((m) => m.id));
   return {
     seen,
-    recent: summaryKnown ? uncovered(seen) : seen,
-    summaryKnown,
+    seenIds,
+    recent: seen.filter((m) => !covered.has(m.id)),
+    archive: seen.filter((m) => covered.has(m.id)),
+    stateKnown: !missedSome || [...covered].every((id) => seenIds.has(id)),
     missedSome,
   };
 }

@@ -97,11 +97,62 @@ export type Conversation = {
   title: string;
   /** Situation de départ commune, connue de tous les personnages présents. */
   sceneDescription: string | null;
+  /**
+   * Ancien résumé libre, antérieur au registre de faits. Il n'est plus écrit :
+   * sa présence sans `memory` signale une mémoire à reconstruire.
+   */
   summary: string | null;
+  /** Dernier message déjà intégré à la mémoire de scène. */
   summaryThroughMessageId: string | null;
+  /** Mémoire de scène : registre de faits et état courant. */
+  memory: SceneMemory | null;
   createdAt: string;
   updatedAt: string;
   lastInteractionAt: string | null;
+};
+
+export type MemoryCategory =
+  | "relationship"
+  | "event"
+  | "place"
+  | "object"
+  | "secret"
+  | "commitment"
+  | "person"
+  | "other";
+
+/**
+ * Un fait de la scène. Chaque fait vit seul : la mémoire n'est jamais
+ * réécrite d'un bloc, un fait n'en sort que si un message le contredit
+ * ou si l'utilisateur le retire.
+ */
+export type MemoryFact = {
+  /** Identifiant court et stable dans la conversation (« f12 »). */
+  id: string;
+  text: string;
+  category: MemoryCategory;
+  /** Épinglé : toujours transmis, et rappelé juste avant chaque réplique. */
+  pinned: boolean;
+  /** `user` : saisi ou corrigé à la main ; l'extraction automatique n'y touche plus. */
+  origin: "auto" | "user";
+  /**
+   * Messages qui établissent le fait. Un personnage ne connaît le fait que
+   * s'il a assisté à l'un d'eux. Vide = connu de tous.
+   */
+  sourceMessageIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SceneMemory = {
+  version: 1;
+  facts: MemoryFact[];
+  /** Instantané remplacé à chaque mise à jour : qui est où, ce qui est en cours. */
+  state: string[];
+  /** Questions et intrigues encore ouvertes. */
+  threads: string[];
+  /** Prochain numéro d'identifiant de fait. */
+  nextFactNumber: number;
 };
 
 /** Participation d'une persona à une conversation de groupe. */

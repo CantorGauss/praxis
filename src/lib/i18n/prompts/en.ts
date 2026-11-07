@@ -276,12 +276,49 @@ export const enPrompts: PromptPack = {
       `out loud, now is the moment: slip a short "(aside: …)" to the audience ` +
       `in addition to your line.`,
 
-    conversationSummary: (summary) =>
-      `[CONVERSATION SUMMARY]\n` +
-      `This summary stops where the following messages begin. Its facts remain ` +
-      `true, but its last known state may be out of date: if they differ on ` +
-      `what is happening now, the following messages win.\n` +
-      summary,
+    sceneMemory: ({ pinned, groups, partial }) => {
+      const lines = [
+        `[SCENE MEMORY]`,
+        `These things really happened in this scene and remain true, even if ` +
+          `nobody is talking about them right now. They outrank your assumptions ` +
+          `and your own earlier lines; only an event in the scene that explicitly ` +
+          `contradicts one can change it. Do not recite them: live with them.`,
+      ];
+      if (pinned.length > 0) {
+        lines.push(`Never forget:\n${pinned.map((f) => `- ${f}`).join("\n")}`);
+      }
+      for (const group of groups) {
+        lines.push(`${group.label}:\n${group.facts.map((f) => `- ${f}`).join("\n")}`);
+      }
+      if (partial) {
+        lines.push(`(Only the facts most useful right now are listed here.)`);
+      }
+      return lines.join("\n");
+    },
+
+    sceneState: ({ state, threads }) => {
+      const lines = [`[WHERE THE SCENE STOOD]`];
+      if (state.length > 0) lines.push(state.map((s) => `- ${s}`).join("\n"));
+      if (threads.length > 0) {
+        lines.push(`Still open:\n${threads.map((t) => `- ${t}`).join("\n")}`);
+      }
+      lines.push(
+        `This state comes before the following messages: if they show the ` +
+          `situation has changed since, they win.`,
+      );
+      return lines.join("\n");
+    },
+
+    recalledPassages: (passages) =>
+      `[MEMORIES FROM EARLIER IN THE SCENE]\n` +
+      `Exact excerpts from earlier moments, brought back because they touch on ` +
+      `what is being said now. What happened since outranks them. Use them to ` +
+      `stay consistent; do not quote them word for word.\n` +
+      passages.map((p) => `"${p}"`).join("\n---\n"),
+
+    pinnedReminder: (facts) =>
+      `[DO NOT FORGET]\n${facts.map((f) => `- ${f}`).join("\n")}\n` +
+      `These facts are true in the scene. Do not recite this reminder.`,
 
     partialPresence: () =>
       `[WHAT YOU KNOW OF THE SCENE]\n` +
@@ -508,63 +545,73 @@ export const enPrompts: PromptPack = {
       "You do not have to come round: a refusal or a counter-proposal is legitimate if your character warrants it.",
   },
 
-  summary: {
-    system: ({ maxBullets }) =>
-      "You keep the memory of a fictional scene. It is the only trace of what " +
-      "leaves the history: whatever you omit, the characters forget for good. " +
-      "Rewrite it entirely in English from the previous summary and the new " +
-      "messages. ESTABLISHED FACTS is cumulative (at most 14 bullets): carry " +
-      "over every fact from the previous summary, even if the new messages do " +
-      "not mention it. Silence never removes a fact; only a new message that " +
-      "contradicts it or makes it obsolete replaces it. It covers completed " +
-      "events, revelations and who knows them, places and who they belong to, " +
-      "where each person is, the state of important objects, relationships " +
-      "and their shared past (how long the characters have known each other, " +
-      "what they went through), even when only mentioned in passing, " +
-      "commitments and decisions. A named person who is not a played " +
-      "character (a flatmate, an ex, a neighbour who turned up mid-scene) has " +
-      "no profile: this memory is all that says who they are. As long as they " +
-      "matter to the story, keep their identity and their link to the " +
-      "characters (\"Marie, Anna's flatmate\"). Each bullet fits in 25 words: keep the fact, " +
-      "not the story of how it came about. Rather than lose a fact, merge it " +
-      "with a neighbouring one. A fact is what actually happened: do not confuse it " +
-      "with what characters say, order, plan or believe. An order is not " +
-      "carried out because it was given, a character's mistake does not rewrite " +
-      "what happened, and a completed action stays true even if someone later " +
-      "ignores or contradicts it. Gestures between asterisks and stage " +
-      "directions are facts. Only assign a place or object to someone if the " +
-      "scene says so clearly; if the characters contradict each other on it, " +
-      "write that it is uncertain. Keep what limits the possibilities: a locked " +
-      "door, a place searched and found empty, where someone is. LAST KNOWN STATE is a snapshot replaced on every " +
-      "rewrite (at most 3 bullets): who is where and what is under way, " +
-      "misunderstandings included. It never contradicts ESTABLISHED FACTS, and " +
-      "an announced departure has not happened until someone has moved. OPEN QUESTIONS removes anything answered, " +
-      "abandoned or no longer applicable (at most 3 bullets). IMPORTANT RECENT " +
-      "EVENTS keeps what has just happened and still weighs on what follows (at " +
-      "most 2 bullets). Keep no greetings, small talk, general tone, passing " +
-      "reactions or merely colourful details. Each message is " +
-      "prefixed with its speaker: never mix up attributions. Invent nothing. " +
-      `Absolute limit: ${maxBullets} bullets in total. In every section, each ` +
-      "line is a bullet starting with \"- \", made of complete sentences ending " +
-      "in punctuation. Properly finish every section you started. Answer only with these " +
-      "sections, in this order: LAST KNOWN STATE, IMPORTANT RECENT EVENTS, OPEN " +
-      "QUESTIONS, ESTABLISHED FACTS. Omit an empty section.",
-    user: ({ previousSummary, newMessages, compact }) =>
-      (previousSummary ? `Existing summary:\n${previousSummary}\n\n` : "") +
-      `New messages to integrate:\n${newMessages}\n\n` +
-      "Now rewrite the complete memory. Carry over every established fact unless " +
-      "a new message contradicts it or makes it obsolete. The new messages are " +
-      "more recent than the whole existing summary and correct it where necessary." +
-      (compact
-        ? "\n\nThe memory is full: this time, cut ESTABLISHED FACTS down to 10 " +
-          "bullets at most. Group older facts about the same matter into a single " +
-          "summary bullet, keep what still weighs on what follows and drop the " +
-          "detail of who said what."
-        : ""),
+  memory: {
+    system:
+      `You keep the fact ledger of a fictional scene. This ledger is the ` +
+      `characters' only lasting memory: whatever you leave out, they will ` +
+      `eventually forget. You never rewrite the ledger: you only report what ` +
+      `changes.\n\n` +
+      `Reply ONLY with a JSON object of this shape:\n` +
+      `{"add":[{"text":"…","category":"…","sources":[1,2]}],` +
+      `"update":[{"id":"f3","text":"…","sources":[4]}],` +
+      `"retire":["f5"],` +
+      `"state":["…"],` +
+      `"threads":["…"]}\n\n` +
+      `add — every new, lasting fact brought by the new messages: completed ` +
+      `events, revelations and who knows them, relationships and shared history ` +
+      `(how long the characters have known each other, what they went through), ` +
+      `places and who they belong to, the state and whereabouts of important ` +
+      `objects, commitments, promises and decisions, named people who are not ` +
+      `played characters ("Marie, Anna's flatmate"), anything that narrows what ` +
+      `is possible (a locked door, a place searched and found empty). One ` +
+      `complete, self-contained sentence of at most 30 words, using proper names ` +
+      `rather than pronouns. "category" is one of: relationship, person, event, ` +
+      `secret, commitment, place, object, other. "sources": the numbers of the ` +
+      `messages that establish the fact.\n` +
+      `update — a ledger fact has changed: give its id and its complete new ` +
+      `wording. Never duplicate an existing fact.\n` +
+      `retire — only facts that a new message contradicts or makes obsolete. ` +
+      `Silence never retires a fact.\n` +
+      `state — 1 to 4 sentences: who is where and what is going on at the end of ` +
+      `the new messages. It replaces the previous state. An announced departure ` +
+      `has not happened until someone actually moves.\n` +
+      `threads — 0 to 4 questions or plot threads still open; drop the ones ` +
+      `that have been answered.\n\n` +
+      `A fact is what actually happened, not what a character says, orders, ` +
+      `plans or believes: an order is not carried out because it was given, and ` +
+      `a lie is written "Marc claims that…". Gestures between asterisks and ` +
+      `stage directions are facts. Each message is prefixed with its speaker: ` +
+      `never mix up who said or did what. Ignore greetings, small talk and ` +
+      `passing moods. Invent nothing. Write in English. If nothing lasting ` +
+      `happened, return empty lists.`,
+    user: ({ facts, omittedFacts, state, threads, newMessages }) =>
+      `Current ledger:\n` +
+      (facts.length > 0 ? facts.map((f) => `- ${f}`).join("\n") : "(empty)") +
+      (omittedFacts > 0
+        ? `\n(${omittedFacts} other facts, apparently unrelated to these messages, are not shown.)`
+        : "") +
+      (state.length > 0 ? `\n\nPrevious state:\n${state.map((s) => `- ${s}`).join("\n")}` : "") +
+      (threads.length > 0
+        ? `\n\nOpen questions:\n${threads.map((t) => `- ${t}`).join("\n")}`
+        : "") +
+      `\n\nNew messages:\n${newMessages}\n\n` +
+      `Now reply with the JSON of the changes.`,
     messageLine: (name, content) => `${name}: ${content}`,
-    emptySummaryError: "the server returned an empty summary",
-    truncatedSummaryError: "the server returned a truncated summary",
-    stalledSummaryError: "the summary rebuild made no progress",
+    categoryLabels: {
+      relationship: "Relationships",
+      person: "People",
+      event: "Events",
+      secret: "Secrets and revelations",
+      commitment: "Commitments and decisions",
+      place: "Places",
+      object: "Objects",
+      other: "Other",
+    },
+    stateLabel: "Where the scene stands",
+    threadsLabel: "Open questions",
+    heading: (label) => `${label}:`,
+    invalidUpdateError: "the server did not return a readable update",
+    stalledError: "the memory rebuild made no progress",
   },
 
   emotion: {

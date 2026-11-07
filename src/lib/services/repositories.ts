@@ -14,6 +14,7 @@ import type {
   MessageStatus,
   ModelProfile,
   Persona,
+  SceneMemory,
 } from "../types";
 import { DEFAULT_SETTINGS, DEFAULT_TIMEOUT_MS } from "../types";
 import { detectLocale, isLocale, type Locale } from "../i18n/locales";
@@ -23,6 +24,7 @@ import { normalizeAppearance, type AvatarAppearance } from "./avatar";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./inference";
 import { decodeInteraction } from "./coordination";
 import type { PresenceSpan } from "./presence";
+import { decodeMemory } from "./memory";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -559,6 +561,7 @@ type ConversationRow = {
   scene_description: string | null;
   summary: string | null;
   summary_through_message_id: string | null;
+  memory?: string | null;
   created_at: string;
   updated_at: string;
   last_interaction_at: string | null;
@@ -572,10 +575,15 @@ function conversationFromRow(r: ConversationRow): Conversation {
     sceneDescription: r.scene_description,
     summary: r.summary,
     summaryThroughMessageId: r.summary_through_message_id,
+    memory: decodeMemory(r.memory ?? null),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     lastInteractionAt: r.last_interaction_at,
   };
+}
+
+function encodeMemory(memory: SceneMemory | null): string | null {
+  return memory ? JSON.stringify(memory) : null;
 }
 
 export const conversationRepo = {
@@ -614,6 +622,7 @@ export const conversationRepo = {
       sceneDescription,
       summary: null,
       summaryThroughMessageId: null,
+      memory: null,
       createdAt: now,
       updatedAt: now,
       lastInteractionAt: null,
@@ -626,7 +635,7 @@ export const conversationRepo = {
       `UPDATE conversations SET
         persona_id = $2, title = $3, summary = $4,
         summary_through_message_id = $5, updated_at = $6, last_interaction_at = $7,
-        scene_description = $8
+        scene_description = $8, memory = $9
        WHERE id = $1`,
       [
         conversation.id,
@@ -637,6 +646,7 @@ export const conversationRepo = {
         nowIso(),
         conversation.lastInteractionAt,
         conversation.sceneDescription,
+        encodeMemory(conversation.memory),
       ],
     );
   },
@@ -1274,7 +1284,7 @@ const EXPORT_TABLES = [
   "messages",
 ] as const;
 
-export const EXPORT_SCHEMA_VERSION = 7;
+export const EXPORT_SCHEMA_VERSION = 8;
 
 export async function exportAllData(): Promise<string> {
   const db = await getDb();

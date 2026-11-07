@@ -214,7 +214,7 @@ export const enUi = {
     moreOptions: "More options",
     noModel: "no model",
     connection: "Connection",
-    conversationSummary: "Conversation summary",
+    sceneMemory: "Scene memory",
     temperature: "Temperature",
     temperatureAria: "Temperature for this conversation",
     characterValue: "Character's value",
@@ -226,29 +226,43 @@ export const enUi = {
     capacityBarTitle: "Context sent, then room reserved for the reply",
     capacityBarAria: "Breakdown of the model's capacity",
     capacityNote:
-      "The rest is available headroom. Older messages are summarised before it runs out.",
+      "The rest is available headroom. Older messages go into memory before it runs out.",
     openSettings: "Open settings",
-    closeSummary: "Close the summary",
-    condensedMemory: "Condensed memory",
-    summaryExplanation:
-      "This text is passed to the characters to preserve older facts. Recent " +
-      "exchanges are still kept in full alongside this memory.",
-    noSummaryYet: "No condensed memory yet",
-    noSummaryBody:
-      "Recent exchanges are still passed to the characters in full. A summary " +
-      "becomes useful as the conversation grows.",
-    summaryCounts: (condensed: number, recent: number) =>
-      `${condensed} older messages condensed · ${recent} recent kept in full`,
-    summaryAvailableFrom: (count: number) =>
-      `${count} messages available to build this memory`,
-    summaryAvailableAfter: (threshold: number) =>
-      `Available after more than ${threshold} messages`,
-    generating: "Generating…",
-    regenerateSummary: "Regenerate the summary",
-    createSummary: "Create the summary",
-    compressing: "Compressing the context…",
+    closeMemory: "Close the memory",
+    memoryKicker: "What the characters don't forget",
+    memoryExplanation:
+      "Each fact is kept on its own and only removed if the scene contradicts " +
+      "it. A character only knows the facts established in front of them. Pin " +
+      "what must never be forgotten: it is restated before every line. Earlier " +
+      "passages related to the scene are also found and brought back word for word.",
+    memoryEmpty: "No facts kept yet",
+    memoryEmptyBody:
+      "Recent exchanges are still passed on in full. The ledger fills up as the " +
+      "conversation grows — you can already add your own facts.",
+    memoryState: "Where the scene stands",
+    memoryThreads: "Open questions",
+    memoryAddPlaceholder: "A fact that must never be forgotten…",
+    memoryAdd: "Add",
+    memoryPin: "Pin",
+    memoryUnpin: "Unpin",
+    memoryPinned: "Pinned",
+    memoryEdited: "Edited by hand",
+    memoryDelete: "Remove this fact",
+    memoryEdit: "Edit",
+    memoryCounts: (facts: number, covered: number, backlog: number) =>
+      `${facts} ${facts === 1 ? "fact" : "facts"} · ${covered} messages read` +
+      (backlog > 0 ? ` · ${backlog} pending` : ""),
+    memoryAvailableAfter: (threshold: number) =>
+      `The automatic ledger starts after ${threshold} messages`,
+    memoryCatchUp: "Update now",
+    memoryRebuild: "Rebuild all",
+    memoryRebuildTitle:
+      "Rereads the whole conversation from the start. Facts you added, edited " +
+      "or pinned are kept.",
+    generating: "Reading…",
+    compressing: "Updating the memory…",
     compressingCount: (count: number) =>
-      `${count} older messages are moving into the summary`,
+      `${count} older messages to read`,
     startingSituation: "Starting situation",
     welcomeGroup: (names: string, first: string) =>
       `${names} are here. Below the input, choose who answers — or leave “Auto” ` +
@@ -552,12 +566,12 @@ export const enUi = {
     performance: "Performance",
     historyWindow: "Messages kept verbatim before summarising",
     historyWindowHint: (keptRecent: number, ratioPercent: number) =>
-      `Every request reprocesses the unsummarised history, and a two-character ` +
-      `scene produces three messages per turn. Beyond this number, the oldest ` +
-      `move into the summary. Lower it if responses slow down; raise it if the ` +
-      `characters lose the thread. The default is 30. The ${keptRecent} most ` +
-      `recent messages are always kept word for word; compression also triggers ` +
-      `around ${ratioPercent}% of the window.`,
+      `Every request reprocesses the messages not yet in memory, and a ` +
+      `two-character scene produces three messages per turn. Beyond this number, ` +
+      `the oldest are read and their facts join the ledger; older passages can ` +
+      `still be found word for word. Lower it if responses slow down. The default ` +
+      `is 30. The ${keptRecent} most recent messages are always passed on word for ` +
+      `word; an update also triggers around ${ratioPercent}% of the window.`,
     groupConversation: "Multi-character conversation",
     whoSpeaks: "Who takes the floor",
     roundRobin: "Scene order",
@@ -679,25 +693,24 @@ export const enUi = {
       "The characters have already taken several turns in a row. Write a message to restart the scene.",
     noConnection: "No connection configured. Add a server in the settings.",
     noModel: "No model selected. Choose a model in the settings.",
-    waitBeforeRebuildingSummary:
-      "Wait for the response to finish before rebuilding the summary.",
-    cannotRebuildSummaryOffline: "Cannot rebuild the summary without a connected model.",
-    summaryAppearsLater: (keptMessages: number) =>
-      `The summary will appear once the conversation goes past ${keptMessages} ` +
-      `messages; the current exchanges are still kept in full.`,
-    summaryRebuildFailed: (reason: string) =>
-      `Cannot rebuild the summary: ${reason}. Try again with the same button.`,
-    nothingOldToSummarize: "There are no older messages to summarise yet.",
-    summaryRebuilt: (keptMessages: number) =>
-      `Summary rebuilt from the original messages; ${keptMessages} recent ` +
-      `messages are still kept in full.`,
-    contextCompressed: (absorbed: number, kept: number) =>
-      `Context compressed: ${absorbed} older ` +
-      `${absorbed > 1 ? "messages folded" : "message folded"} into the summary, ` +
-      `${kept} kept verbatim.`,
-    autoSummaryInterrupted: (reason: string) =>
-      `Automatic summary interrupted: ${reason}. The conversation continues ` +
-      `normally. Open ••• → Conversation summary to regenerate it now, or wait ` +
+    waitBeforeRebuildingMemory:
+      "Wait for the response to finish before updating the memory.",
+    cannotRebuildMemoryOffline: "Cannot update the memory without a connected model.",
+    memoryAppearsLater: (keptMessages: number) =>
+      `The memory will start filling once the conversation goes past ` +
+      `${keptMessages} messages; current exchanges are still passed on in full.`,
+    memoryRebuildFailed: (reason: string) =>
+      `Cannot update the memory: ${reason}. Try again with the same button.`,
+    nothingOldToMemorize: "There are no older messages to put into memory yet.",
+    memoryRebuilt: (factCount: number) =>
+      `Memory up to date from the original messages: ${factCount} ` +
+      `${factCount === 1 ? "fact" : "facts"} in the ledger.`,
+    memoryUpdated: (absorbed: number, changed: number) =>
+      `Memory updated: ${absorbed} older ${absorbed === 1 ? "message" : "messages"} read` +
+      (changed > 0 ? `, ${changed} ${changed === 1 ? "fact" : "facts"} added or corrected.` : `, nothing new to keep.`),
+    autoMemoryInterrupted: (reason: string) =>
+      `Automatic memory update interrupted: ${reason}. The conversation ` +
+      `continues normally. Open ••• → Scene memory to try again now, or wait ` +
       `for the next automatic attempt.`,
   },
 };

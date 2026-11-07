@@ -28,7 +28,7 @@
   import { CONNECTION_PRESETS, DEFAULT_TIMEOUT_MS } from "../types";
   import { LOCALES, LOCALE_LABELS, type Locale } from "../i18n/locales";
   import { formatNumber, t } from "../i18n/ui.svelte";
-  import { KEEP_RECENT_MESSAGES, SUMMARY_CONTEXT_RATIO } from "../services/summaryService";
+  import { KEEP_RECENT_MESSAGES, MEMORY_CONTEXT_RATIO } from "../services/memoryService";
   import { backdrop } from "./backdrop";
 
   const s = $derived(t());
@@ -656,7 +656,7 @@
       <span class="hint">
         {s.settings.historyWindowHint(
           KEEP_RECENT_MESSAGES,
-          Math.round(SUMMARY_CONTEXT_RATIO * 100),
+          Math.round(MEMORY_CONTEXT_RATIO * 100),
         )}
       </span>
     </div>

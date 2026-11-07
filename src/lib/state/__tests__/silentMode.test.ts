@@ -3,7 +3,7 @@ import { app } from "../appState.svelte";
 import { DEFAULT_SETTINGS, type Conversation, type Persona } from "../../types";
 import * as llm from "../../services/llmClient";
 import * as director from "../../services/director";
-import * as summaries from "../../services/summaryService";
+import * as summaries from "../../services/memoryService";
 import * as coordination from "../../services/coordination";
 import * as emotionAnalysis from "../../services/emotionAnalysis";
 import type { MessageInteraction } from "../../types";
@@ -13,7 +13,7 @@ import { MAX_CONSECUTIVE_AI_TURNS } from "../../services/scene";
 const NOW = "2026-09-19T12:00:00.000Z";
 const conversation: Conversation = {
   id: "scene", personaId: "anna", title: "Au café", sceneDescription: "Un café tranquille.",
-  summary: null, summaryThroughMessageId: null, createdAt: NOW, updatedAt: NOW,
+  summary: null, summaryThroughMessageId: null, memory: null, createdAt: NOW, updatedAt: NOW,
   lastInteractionAt: null,
 };
 const personas: Persona[] = ["Anna", "Marc"].map((name) => ({
@@ -235,11 +235,18 @@ describe("coordination de la scène", () => {
     expect(anna.text).not.toContain("[CE QUE TU SAIS DE LA SCÈNE]");
   });
 
-  it("ne donne pas non plus le résumé à l'analyse émotionnelle d'un arrivant", async () => {
+  it("ne donne pas non plus les faits de la mémoire à l'analyse émotionnelle d'un arrivant", async () => {
     const before = "2026-09-19T11:00:00.000Z";
     app.settings = { ...app.settings, emotionEnabled: true, emotionAnalysisEnabled: true };
     app.conversations = [{
-      ...conversation, summary: "Le code du coffre est 4512.", summaryThroughMessageId: "old-1",
+      ...conversation, summaryThroughMessageId: "old-1",
+      memory: {
+        version: 1, state: [], threads: [], nextFactNumber: 2,
+        facts: [{
+          id: "f1", text: "Le code du coffre est 4512.", category: "secret", pinned: false,
+          origin: "auto", sourceMessageIds: ["old-1"], createdAt: before, updatedAt: before,
+        }],
+      },
     }];
     app.participantIds = ["anna"];
     app.messages = [
@@ -279,15 +286,29 @@ describe("coordination de la scène", () => {
     expect(app.proposals[0].status).toBe("open");
   });
 
-  it("invalide les intentions, le destinataire et le résumé après modification", async () => {
+  it("invalide les intentions, le destinataire et la mémoire après modification", async () => {
     vi.mocked(coordination.analyzeInteraction).mockResolvedValue(speechAct({ intent: "question" }));
     await app.sendMessage("@Anna Bonjour");
-    app.conversations = [{ ...conversation, summary: "Ancien accord.", summaryThroughMessageId: app.messages[0].id }];
+    app.conversations = [{
+      ...conversation, summaryThroughMessageId: app.messages[0].id,
+      memory: {
+        version: 1, state: ["Anna salue Jeff."], threads: [], nextFactNumber: 3,
+        facts: [
+          { id: "f1", text: "Ancien accord.", category: "commitment", pinned: false, origin: "auto",
+            sourceMessageIds: [app.messages[0].id], createdAt: NOW, updatedAt: NOW },
+          { id: "f2", text: "Jeff aime le thé.", category: "person", pinned: true, origin: "user",
+            sourceMessageIds: [], createdAt: NOW, updatedAt: NOW },
+        ],
+      },
+    }];
     await app.editLastUserMessage("@Marc Bonsoir");
     expect(messageRepo.removeAfter).toHaveBeenCalled();
     expect(messageRepo.update).toHaveBeenLastCalledWith(expect.any(String), "Une nouvelle réplique pour les autres.", "complete", null);
     expect(app.messages[0].content).toBe("@Marc Bonsoir");
-    expect(app.currentConversation?.summary).toBeNull();
+    expect(app.currentConversation?.summaryThroughMessageId).toBeNull();
+    // Le fait tiré du message modifié tombe ; celui de l'utilisateur reste.
+    expect(app.currentConversation?.memory?.facts.map((f) => f.id)).toEqual(["f2"]);
+    expect(app.currentConversation?.memory?.state).toEqual([]);
     expect(speakerIds).toEqual(["anna", "marc"]);
     expect(coordination.analyzeInteraction).toHaveBeenCalledTimes(4);
   });
@@ -429,21 +450,24 @@ describe("mode Se taire", () => {
     expect(app.messages).toHaveLength(0);
   });
 
-  it("attend la fin d'un résumé manuel pour démarrer le mode silencieux", async () => {
+  it("attend la fin d'une reconstruction manuelle de la mémoire pour démarrer le mode silencieux", async () => {
     const history = Array.from({ length: summaries.KEEP_RECENT_MESSAGES + 1 }, (_, i) => ({
       id: `old-${i}`, conversationId: conversation.id, role: "assistant" as const,
       content: "Une ancienne réplique.", status: "complete" as const, kind: "speech" as const,
       personaId: "anna", personaName: "Anna", addressee: null, createdAt: NOW,
     }));
     vi.mocked(messageRepo.list).mockResolvedValueOnce(history);
-    let finishSummary!: (outcome: summaries.SummaryOutcome) => void;
-    vi.spyOn(summaries, "rebuildSummary").mockReturnValue(new Promise((resolve) => { finishSummary = resolve; }));
+    let finishSummary!: (outcome: summaries.MemoryOutcome) => void;
+    vi.spyOn(summaries, "rebuildMemory").mockReturnValue(new Promise((resolve) => { finishSummary = resolve; }));
     const rebuilding = app.regenerateSummary();
     await vi.advanceTimersByTimeAsync(0);
     expect(app.summarizing).toBe(true);
     await app.staySilent();
     expect(llm.streamChat).not.toHaveBeenCalled();
-    finishSummary({ ok: true, conversation });
+    finishSummary({
+      ok: true, conversation,
+      applied: { memory: { version: 1, facts: [], state: [], threads: [], nextFactNumber: 1 }, added: 0, updated: 0, retired: 0 },
+    });
     await rebuilding;
     await vi.advanceTimersByTimeAsync(750);
     expect(speakerIds).toEqual(["anna"]);

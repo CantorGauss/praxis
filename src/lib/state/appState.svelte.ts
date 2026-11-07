@@ -7,6 +7,7 @@ import type {
   EmotionalReaction,
   EmotionalState,
   Message,
+  MemoryCategory,
   MessageReaction,
   Persona,
 } from "../types";
@@ -38,15 +39,23 @@ import { applyDecay, neutralState } from "../services/emotion";
 import { assemblePrompt, type SceneInput } from "../services/promptAssembler";
 import { knowledgeFor, type PresenceSpan } from "../services/presence";
 import {
-  needsSummary,
-  rebuildSummary,
+  memoryNeedsMigration,
+  needsMemoryUpdate,
+  rebuildMemory,
   uncoveredMessages,
-  updateSummary,
+  updateMemory,
   KEEP_RECENT_MESSAGES,
-  MAX_SUMMARY_BATCH,
-  MIN_SUMMARY_BATCH,
-  summaryNeedsRefresh,
-} from "../services/summaryService";
+  MAX_MEMORY_BATCH,
+} from "../services/memoryService";
+import {
+  addUserFact,
+  editFact,
+  factsKnownBy,
+  memoryDigest,
+  removeFact,
+  rewindMemory,
+  setFactPinned,
+} from "../services/memory";
 import {
   cleanSpeakerReply,
   clampAutoRounds,
@@ -187,7 +196,7 @@ class AppState {
   lastPromptContextTokens = $state<number | null>(null);
   /** Place réellement gardée pour la réponse du dernier personnage. */
   lastReplyTokenBudget = $state<number | null>(null);
-  /** Compression de l'historique actuellement exécutée par le modèle. */
+  /** Mise à jour de la mémoire de scène actuellement exécutée par le modèle. */
   summarizing = $state(false);
   summaryPendingMessages = $state(0);
   /** Englobe préparation, compression, génération et tours automatiques. */
@@ -1301,7 +1310,7 @@ class AppState {
         };
       }),
       sceneDescription: conv.sceneDescription,
-      summary: conv.summary,
+      summary: this.memoryDigestFor(conv),
       messages: this.messages,
       label: this.labelFor,
       userName: this.userName,
@@ -1513,7 +1522,7 @@ class AppState {
           description: p.description,
         })),
         sceneDescription: conv.sceneDescription,
-        summary: conv.summary,
+        summary: this.memoryDigestFor(conv),
         recentMessages: this.messages,
         label: this.labelFor,
         userName: this.userName,
@@ -1866,6 +1875,15 @@ class AppState {
       conv.summaryThroughMessageId,
     );
     const recent = knowledge.recent;
+    // Ce que ce personnage sait de la mémoire : les faits établis devant lui,
+    // et l'état de la scène s'il a assisté à tout ce qu'elle couvre.
+    const memory = conv.memory
+      ? {
+          facts: factsKnownBy(conv.memory.facts, knowledge.seenIds),
+          state: knowledge.stateKnown ? conv.memory.state : [],
+          threads: knowledge.stateKnown ? conv.memory.threads : [],
+        }
+      : null;
 
     // Ce à quoi le personnage réagit : dernier bloc non signé de lui. Cette
     // évaluation précède la génération pour affecter la réplique en cours.
@@ -1894,7 +1912,7 @@ class AppState {
         this.pack,
         conv.sceneDescription,
         knownContextFor(
-          knowledge.summaryKnown ? conv.summary : null,
+          memory ? memoryDigest(memory.facts, memory.state, this.pack) : null,
           transcript,
           speaker.name,
           this.pack,
@@ -1965,7 +1983,8 @@ class AppState {
       state,
       immediateReaction,
       temporal,
-      summary: knowledge.summaryKnown ? conv.summary : null,
+      memory,
+      archive: knowledge.archive,
       coordination: scene ? this.coordinationFrom(knowledge.seen) : undefined,
       stagnation,
       asideNudge,
@@ -2126,35 +2145,58 @@ class AppState {
     await this.maybeSummarize(conversationId);
   }
 
-  /** Reconstruit à la demande la mémoire depuis les messages d'origine. */
+  /** Version texte de la mémoire, pour les tâches annexes (critique, imprévus). */
+  memoryDigestFor(conv: Conversation): string | null {
+    return conv.memory ? memoryDigest(conv.memory.facts, conv.memory.state, this.pack) : null;
+  }
+
+  /** Messages pas encore versés dans la mémoire de la conversation affichée. */
+  get memoryBacklog(): number {
+    const conv = this.currentConversation;
+    if (!conv) return 0;
+    const pending = uncoveredMessages(this.messages, conv.summaryThroughMessageId).length;
+    return Math.max(0, pending - KEEP_RECENT_MESSAGES);
+  }
+
+  private replaceConversation(updated: Conversation): void {
+    this.conversations = this.conversations.map((c) => (c.id === updated.id ? updated : c));
+  }
+
+  /**
+   * Verse en mémoire les messages en attente. `fromScratch` refait tout le
+   * registre depuis les messages d'origine, en gardant les faits saisis,
+   * corrigés ou épinglés à la main.
+   */
   async regenerateSummary(
     conversationId: string | null = this.currentConversationId,
+    fromScratch = true,
   ): Promise<void> {
     if (!conversationId || this.summarizing) return;
     if (this.turnInProgress) {
-      this.notice = t().app.waitBeforeRebuildingSummary;
+      this.notice = t().app.waitBeforeRebuildingMemory;
       return;
     }
     const conv = this.conversationById(conversationId);
     const modelId = this.activeModelId;
     const target = this.target;
     if (!conv || !modelId || !target) {
-      this.notice = t().app.cannotRebuildSummaryOffline;
+      this.notice = t().app.cannotRebuildMemoryOffline;
       return;
     }
     const messages = await messageRepo.list(conversationId);
     if (messages.length <= KEEP_RECENT_MESSAGES) {
-      this.notice = t().app.summaryAppearsLater(KEEP_RECENT_MESSAGES);
+      this.notice = t().app.memoryAppearsLater(KEEP_RECENT_MESSAGES);
       return;
     }
     const profile = await profileRepo.get(modelId);
+    const contextTokens = this.contextBudgetFor(modelId, profile.contextWindow).tokens;
     this.summarizing = true;
     this.summaryPendingMessages = Math.min(
-      MAX_SUMMARY_BATCH,
+      MAX_MEMORY_BATCH,
       messages.length - KEEP_RECENT_MESSAGES,
     );
     try {
-      const outcome = await rebuildSummary(
+      const outcome = await rebuildMemory(
         target,
         modelId,
         conv,
@@ -2163,24 +2205,20 @@ class AppState {
         profile.customParameters,
         this.pack,
         ({ remainingMessages }) => {
-          this.summaryPendingMessages = Math.min(
-            MAX_SUMMARY_BATCH,
-            remainingMessages,
-          );
+          this.summaryPendingMessages = remainingMessages;
         },
+        { contextTokens, fromScratch: fromScratch || memoryNeedsMigration(conv) },
       );
       if (!outcome.ok) {
         const reason = outcome.reason?.replace(/[.\s]+$/, "");
         this.notice = reason
-          ? t().app.summaryRebuildFailed(reason)
-          : t().app.nothingOldToSummarize;
+          ? t().app.memoryRebuildFailed(reason)
+          : t().app.nothingOldToMemorize;
         return;
       }
       this.summaryRetryFloor.delete(conversationId);
-      this.conversations = this.conversations.map((c) =>
-        c.id === outcome.conversation.id ? outcome.conversation : c,
-      );
-      this.notice = t().app.summaryRebuilt(KEEP_RECENT_MESSAGES);
+      this.replaceConversation(outcome.conversation);
+      this.notice = t().app.memoryRebuilt(outcome.conversation.memory?.facts.length ?? 0);
     } finally {
       this.summarizing = false;
       this.summaryPendingMessages = 0;
@@ -2190,46 +2228,33 @@ class AppState {
     }
   }
 
-  /** Un seul résumé par tour, et pas de nouvelle tentative après un échec
+  /** Un seul lot par tour, et pas de nouvelle tentative après un échec
    *  tant que la conversation n'a pas réellement avancé. */
   private async maybeSummarize(conversationId: string): Promise<void> {
     if (this.summarizing) return;
-    const conv = this.conversationById(conversationId);
+    let conv = this.conversationById(conversationId);
     const modelId = this.activeModelId;
     const target = this.target;
     if (!conv || !modelId || !target) return;
     const messages = await messageRepo.list(conversationId);
-    const rebuilding = summaryNeedsRefresh(conv.summary);
-    const uncovered = rebuilding
-      ? messages
-      : uncoveredMessages(messages, conv.summaryThroughMessageId);
-    // Les anciens résumés peu structurés ne doivent pas continuer à polluer
-    // une conversation encore assez courte pour tenir entièrement en clair.
-    if (
-      rebuilding &&
-      messages.length < KEEP_RECENT_MESSAGES + MIN_SUMMARY_BATCH
-    ) {
-      const cleared = {
+    // L'ancien résumé ne contient ni les sources des faits ni les faits perdus
+    // à chaque réécriture : la mémoire repart des messages d'origine. En
+    // attendant qu'elle les ait tous lus, les souvenirs retrouvés comblent le vide.
+    if (memoryNeedsMigration(conv)) {
+      const migrated: Conversation = {
         ...conv,
         summary: null,
         summaryThroughMessageId: null,
+        memory: { version: 1, facts: [], state: [], threads: [], nextFactNumber: 1 },
       };
-      await conversationRepo.update(cleared);
-      this.conversations = this.conversations.map((c) =>
-        c.id === cleared.id ? cleared : c,
-      );
-      return;
+      await conversationRepo.update(migrated);
+      this.replaceConversation(migrated);
+      conv = migrated;
     }
+    const uncovered = uncoveredMessages(messages, conv.summaryThroughMessageId);
     const profile = await profileRepo.get(modelId);
     const contextTokens = this.contextBudgetFor(modelId, profile.contextWindow).tokens;
-    if (
-      !needsSummary(
-        uncovered,
-        conv.summary,
-        contextTokens,
-        this.settings.historyWindowMessages,
-      )
-    ) {
+    if (!needsMemoryUpdate(uncovered, contextTokens, this.settings.historyWindowMessages)) {
       return;
     }
     // Après un échec, on laisse la conversation grandir avant de réessayer :
@@ -2239,11 +2264,11 @@ class AppState {
 
     this.summarizing = true;
     this.summaryPendingMessages = Math.min(
-      MAX_SUMMARY_BATCH,
+      MAX_MEMORY_BATCH,
       Math.max(0, uncovered.length - KEEP_RECENT_MESSAGES),
     );
     try {
-      const outcome = await updateSummary(
+      const outcome = await updateMemory(
         target,
         modelId,
         conv,
@@ -2251,34 +2276,78 @@ class AppState {
         this.labelFor,
         profile.customParameters,
         this.pack,
+        { contextTokens },
       );
       if (outcome.ok) {
         this.summaryRetryFloor.delete(conversationId);
-        this.conversations = this.conversations.map((c) =>
-          c.id === outcome.conversation.id ? outcome.conversation : c,
-        );
-        // Le dernier chiffre décrivait le prompt d'avant compression ; mieux
-        // vaut attendre la mesure exacte de la prochaine requête.
+        this.replaceConversation(outcome.conversation);
+        // Le dernier chiffre décrivait le prompt d'avant ; mieux vaut attendre
+        // la mesure exacte de la prochaine requête.
         this.lastPromptTokens = null;
         this.lastPromptContextTokens = contextTokens;
-        this.notice = t().app.contextCompressed(
+        this.notice = t().app.memoryUpdated(
           this.summaryPendingMessages,
-          KEEP_RECENT_MESSAGES,
+          outcome.applied.added + outcome.applied.updated,
         );
         return;
       }
-      // `reason: null` : il n'y avait rien à résumer, ce n'est pas un incident.
+      // `reason: null` : il n'y avait rien à verser, ce n'est pas un incident.
       if (outcome.reason === null) return;
       const reason = outcome.reason.replace(/[.\s]+$/, "");
       this.summaryRetryFloor.set(
         conversationId,
         uncovered.length + KEEP_RECENT_MESSAGES,
       );
-      this.notice = t().app.autoSummaryInterrupted(reason);
+      this.notice = t().app.autoMemoryInterrupted(reason);
     } finally {
       this.summarizing = false;
       this.summaryPendingMessages = 0;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mémoire de scène modifiée à la main
+  // -------------------------------------------------------------------------
+
+  /** Une mise à jour automatique en cours écraserait la modification. */
+  get memoryEditable(): boolean {
+    return Boolean(this.currentConversation) && !this.summarizing;
+  }
+
+  private async saveMemory(
+    change: (memory: NonNullable<Conversation["memory"]> | null) => Conversation["memory"],
+  ): Promise<void> {
+    const conv = this.currentConversation;
+    if (!conv || this.summarizing) return;
+    const updated: Conversation = { ...conv, memory: change(conv.memory) };
+    await conversationRepo.update(updated);
+    this.replaceConversation(updated);
+  }
+
+  async addMemoryFact(text: string, category: MemoryCategory, pinned = true): Promise<void> {
+    if (!text.trim()) return;
+    await this.saveMemory((memory) =>
+      addUserFact(memory, text, category, new Date().toISOString(), pinned),
+    );
+  }
+
+  async updateMemoryFact(
+    id: string,
+    changes: { text?: string; category?: MemoryCategory },
+  ): Promise<void> {
+    await this.saveMemory((memory) =>
+      memory ? editFact(memory, id, changes, new Date().toISOString()) : memory,
+    );
+  }
+
+  async setMemoryFactPinned(id: string, pinned: boolean): Promise<void> {
+    await this.saveMemory((memory) =>
+      memory ? setFactPinned(memory, id, pinned, new Date().toISOString()) : memory,
+    );
+  }
+
+  async deleteMemoryFact(id: string): Promise<void> {
+    await this.saveMemory((memory) => (memory ? removeFact(memory, id) : memory));
   }
 
   /** Annule la réponse en cours et abandonne les tours restants. */
@@ -2358,12 +2427,24 @@ class AppState {
     await this.withTurn(async () => {
       await messageRepo.removeAfter(conv.id, lastUser);
       await messageRepo.update(lastUser.id, content, "complete", addressee);
-      // A long autonomous exchange may already have summarized the edited
-      // message and the deleted replies. Rebuild from the surviving history.
-      if (conv.summary) {
-        const updated = { ...conv, summary: null, summaryThroughMessageId: null };
+      // A long autonomous exchange may already have put the edited message
+      // and the deleted replies into memory. Facts drawn from them go, and
+      // the boundary moves back before the edited message.
+      const editedIndex = this.messages.findIndex((m) => m.id === lastUser.id);
+      const boundaryIndex = this.messages.findIndex((m) => m.id === conv.summaryThroughMessageId);
+      if (conv.memory || conv.summary || boundaryIndex >= editedIndex) {
+        const surviving = new Set(this.messages.slice(0, Math.max(0, editedIndex)).map((m) => m.id));
+        const updated: Conversation = {
+          ...conv,
+          summary: null,
+          summaryThroughMessageId:
+            boundaryIndex >= editedIndex
+              ? (this.messages[editedIndex - 1]?.id ?? null)
+              : conv.summaryThroughMessageId,
+          memory: conv.memory ? rewindMemory(conv.memory, surviving) : null,
+        };
         await conversationRepo.update(updated);
-        this.conversations = this.conversations.map((c) => c.id === conv.id ? updated : c);
+        this.replaceConversation(updated);
         this.summaryRetryFloor.delete(conv.id);
       }
       if (this.currentConversationId !== conv.id) return;

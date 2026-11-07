@@ -214,7 +214,7 @@ export const frUi: UiStrings = {
     moreOptions: "Plus d’options",
     noModel: "aucun modèle",
     connection: "Connexion",
-    conversationSummary: "Résumé de la conversation",
+    sceneMemory: "Mémoire de la scène",
     temperature: "Température",
     temperatureAria: "Température de cette conversation",
     characterValue: "Valeur du personnage",
@@ -226,29 +226,45 @@ export const frUi: UiStrings = {
     capacityBarTitle: "Contexte envoyé puis place réservée pour la réponse",
     capacityBarAria: "Répartition de la capacité du modèle",
     capacityNote:
-      "Le reste est la marge disponible. Les anciens messages sont résumés avant de la dépasser.",
+      "Le reste est la marge disponible. Les anciens messages sont versés en mémoire avant de la dépasser.",
     openSettings: "Ouvrir les réglages",
-    closeSummary: "Fermer le résumé",
-    condensedMemory: "Mémoire condensée",
-    summaryExplanation:
-      "Ce texte est transmis aux personnages pour préserver les faits anciens. " +
-      "Les échanges récents restent conservés intégralement à côté de cette mémoire.",
-    noSummaryYet: "Aucune mémoire condensée pour le moment",
-    noSummaryBody:
-      "Les échanges récents sont encore transmis intégralement aux personnages. " +
-      "Un résumé devient utile quand la conversation s'allonge.",
-    summaryCounts: (condensed: number, recent: number) =>
-      `${condensed} anciens messages condensés · ${recent} récents conservés intégralement`,
-    summaryAvailableFrom: (count: number) =>
-      `${count} messages disponibles pour créer cette mémoire`,
-    summaryAvailableAfter: (threshold: number) =>
-      `Disponible après plus de ${threshold} messages`,
-    generating: "Génération…",
-    regenerateSummary: "Régénérer le résumé",
-    createSummary: "Créer le résumé",
-    compressing: "Compression du contexte…",
+    closeMemory: "Fermer la mémoire",
+    memoryKicker: "Ce que les personnages n'oublient pas",
+    memoryExplanation:
+      "Chaque fait est retenu séparément et n'est retiré que si la scène le " +
+      "contredit. Un personnage ne connaît que les faits établis devant lui. " +
+      "Épinglez ce qui ne doit jamais être oublié : c'est rappelé avant chaque " +
+      "réplique. Les anciens passages en rapport avec la scène sont aussi " +
+      "retrouvés et rappelés mot pour mot.",
+    memoryEmpty: "Aucun fait retenu pour le moment",
+    memoryEmptyBody:
+      "Les échanges récents sont encore transmis intégralement. Le registre se " +
+      "remplit quand la conversation s'allonge — vous pouvez déjà y ajouter vos " +
+      "propres faits.",
+    memoryState: "Où en est la scène",
+    memoryThreads: "Questions ouvertes",
+    memoryAddPlaceholder: "Un fait à ne jamais oublier…",
+    memoryAdd: "Ajouter",
+    memoryPin: "Épingler",
+    memoryUnpin: "Désépingler",
+    memoryPinned: "Épinglé",
+    memoryEdited: "Corrigé à la main",
+    memoryDelete: "Retirer ce fait",
+    memoryEdit: "Corriger",
+    memoryCounts: (facts: number, covered: number, backlog: number) =>
+      `${facts} ${facts > 1 ? "faits" : "fait"} · ${covered} messages lus` +
+      (backlog > 0 ? ` · ${backlog} en attente` : ""),
+    memoryAvailableAfter: (threshold: number) =>
+      `Le registre automatique démarre après ${threshold} messages`,
+    memoryCatchUp: "Mettre à jour",
+    memoryRebuild: "Tout reconstruire",
+    memoryRebuildTitle:
+      "Relit toute la conversation depuis le début. Vos faits saisis, corrigés " +
+      "ou épinglés sont conservés.",
+    generating: "Lecture…",
+    compressing: "Mise à jour de la mémoire…",
     compressingCount: (count: number) =>
-      `${count} anciens messages passent dans le résumé`,
+      `${count} anciens messages à lire`,
     startingSituation: "Situation de départ",
     welcomeGroup: (names: string, first: string) =>
       `${names} sont là. Sous la zone de saisie, choisissez qui répond — ou ` +
@@ -554,13 +570,13 @@ export const frUi: UiStrings = {
     performance: "Performance",
     historyWindow: "Messages conservés en clair avant résumé",
     historyWindowHint: (keptRecent: number, ratioPercent: number) =>
-      `Chaque requête retraite l'historique non résumé, et une scène à deux ` +
-      `personnages produit trois messages par tour. Au-delà de ce nombre, les ` +
-      `plus anciens passent dans le résumé. Baissez-le si les réponses ` +
-      `ralentissent ; montez-le si les personnages perdent le fil. Le défaut est ` +
-      `30. Les ${keptRecent} messages les plus récents restent toujours conservés ` +
-      `mot pour mot ; une compression est aussi déclenchée vers ${ratioPercent} % ` +
-      `de la fenêtre.`,
+      `Chaque requête retraite les messages pas encore versés en mémoire, et une ` +
+      `scène à deux personnages produit trois messages par tour. Au-delà de ce ` +
+      `nombre, les plus anciens sont lus et leurs faits rejoignent le registre ; ` +
+      `les passages anciens restent retrouvables mot pour mot. Baissez-le si les ` +
+      `réponses ralentissent. Le défaut est 30. Les ${keptRecent} messages les ` +
+      `plus récents restent toujours transmis mot pour mot ; une mise à jour est ` +
+      `aussi déclenchée vers ${ratioPercent} % de la fenêtre.`,
     groupConversation: "Conversation à plusieurs personnages",
     whoSpeaks: "Qui prend la parole",
     roundRobin: "Ordre de la scène",
@@ -683,27 +699,27 @@ export const frUi: UiStrings = {
       "Les personnages ont déjà enchaîné plusieurs tours. Écrivez un message pour relancer la scène.",
     noConnection: "Aucune connexion configurée. Ajoutez un serveur dans les réglages.",
     noModel: "Aucun modèle sélectionné. Choisissez un modèle dans les réglages.",
-    waitBeforeRebuildingSummary:
-      "Attendez la fin de la réponse avant de recréer le résumé.",
-    cannotRebuildSummaryOffline:
-      "Impossible de recréer le résumé sans modèle connecté.",
-    summaryAppearsLater: (keptMessages: number) =>
-      `Le résumé apparaîtra lorsque la conversation dépassera ` +
+    waitBeforeRebuildingMemory:
+      "Attendez la fin de la réponse avant de mettre à jour la mémoire.",
+    cannotRebuildMemoryOffline:
+      "Impossible de mettre à jour la mémoire sans modèle connecté.",
+    memoryAppearsLater: (keptMessages: number) =>
+      `La mémoire se remplira lorsque la conversation dépassera ` +
       `${keptMessages} messages ; les échanges actuels sont encore ` +
-      `conservés intégralement.`,
-    summaryRebuildFailed: (reason: string) =>
-      `Impossible de recréer le résumé : ${reason}. Réessayez avec ce même bouton.`,
-    nothingOldToSummarize: "Il n'y a pas encore d'anciens messages à résumer.",
-    summaryRebuilt: (keptMessages: number) =>
-      `Résumé recréé à partir des messages d'origine ; ${keptMessages} messages ` +
-      `récents restent conservés intégralement.`,
-    contextCompressed: (absorbed: number, kept: number) =>
-      `Contexte compressé : ${absorbed} ancien` +
-      `${absorbed > 1 ? "s messages intégrés" : " message intégré"} ` +
-      `au résumé, ${kept} conservés en clair.`,
-    autoSummaryInterrupted: (reason: string) =>
-      `Résumé automatique interrompu : ${reason}. La conversation continue ` +
-      `normalement. Ouvrez ••• → Résumé de la conversation pour le régénérer ` +
-      `immédiatement, ou attendez la prochaine tentative automatique.`,
+      `transmis intégralement.`,
+    memoryRebuildFailed: (reason: string) =>
+      `Impossible de mettre à jour la mémoire : ${reason}. Réessayez avec ce même bouton.`,
+    nothingOldToMemorize: "Il n'y a pas encore d'anciens messages à verser en mémoire.",
+    memoryRebuilt: (factCount: number) =>
+      `Mémoire à jour à partir des messages d'origine : ${factCount} ` +
+      `${factCount > 1 ? "faits" : "fait"} au registre.`,
+    memoryUpdated: (absorbed: number, changed: number) =>
+      `Mémoire mise à jour : ${absorbed} ancien` +
+      `${absorbed > 1 ? "s messages lus" : " message lu"}` +
+      (changed > 0 ? `, ${changed} ${changed > 1 ? "faits ajoutés ou corrigés" : "fait ajouté ou corrigé"}.` : `, rien de nouveau à retenir.`),
+    autoMemoryInterrupted: (reason: string) =>
+      `Mise à jour automatique de la mémoire interrompue : ${reason}. La ` +
+      `conversation continue normalement. Ouvrez ••• → Mémoire de la scène pour ` +
+      `réessayer tout de suite, ou attendez la prochaine tentative automatique.`,
   },
 };

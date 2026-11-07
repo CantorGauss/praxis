@@ -902,6 +902,17 @@ fn migrations() -> Vec<Migration> {
             FROM conversation_personas;
         "#,
         },
+        Migration {
+            version: 13,
+            description: "conversation_memory",
+            kind: MigrationKind::Up,
+            // Mémoire de scène en JSON : registre de faits, état courant et
+            // intrigues ouvertes. Elle remplace le résumé libre, réécrit en
+            // entier à chaque mise à jour et qui perdait des faits à chaque
+            // passage. L'ancienne colonne `summary` reste lisible le temps de
+            // la reconstruction.
+            sql: "ALTER TABLE conversations ADD COLUMN memory TEXT;",
+        },
     ]
 }
 

@@ -275,12 +275,49 @@ export const frPrompts: PromptPack = {
       `tout haut, c'est le moment : glisse un court « (aparté : …) » au public, ` +
       `en plus de ta réplique.`,
 
-    conversationSummary: (summary) =>
-      `[RÉSUMÉ DE LA CONVERSATION]\n` +
-      `Ce résumé s'arrête là où commencent les messages qui suivent. Ses faits ` +
-      `restent vrais, mais son dernier état connu peut être dépassé : en cas ` +
-      `d'écart sur ce qui se passe maintenant, les messages qui suivent font foi.\n` +
-      summary,
+    sceneMemory: ({ pinned, groups, partial }) => {
+      const lines = [
+        `[MÉMOIRE DE LA SCÈNE]`,
+        `Ces faits se sont réellement produits dans cette scène et restent vrais, ` +
+          `même si personne n'en parle en ce moment. Ils priment sur tes suppositions ` +
+          `et sur tes répliques précédentes ; seul un événement de la scène qui les ` +
+          `contredit explicitement peut les changer. Ne les récite pas : vis avec.`,
+      ];
+      if (pinned.length > 0) {
+        lines.push(`À ne jamais oublier :\n${pinned.map((f) => `- ${f}`).join("\n")}`);
+      }
+      for (const group of groups) {
+        lines.push(`${group.label} :\n${group.facts.map((f) => `- ${f}`).join("\n")}`);
+      }
+      if (partial) {
+        lines.push(`(Seuls les faits les plus utiles maintenant figurent ici.)`);
+      }
+      return lines.join("\n");
+    },
+
+    sceneState: ({ state, threads }) => {
+      const lines = [`[OÙ EN ÉTAIT LA SCÈNE]`];
+      if (state.length > 0) lines.push(state.map((s) => `- ${s}`).join("\n"));
+      if (threads.length > 0) {
+        lines.push(`Questions encore ouvertes :\n${threads.map((t) => `- ${t}`).join("\n")}`);
+      }
+      lines.push(
+        `Cet état précède les messages qui suivent : s'ils montrent que la ` +
+          `situation a changé depuis, ce sont eux qui font foi.`,
+      );
+      return lines.join("\n");
+    },
+
+    recalledPassages: (passages) =>
+      `[SOUVENIRS DE PLUS TÔT DANS LA SCÈNE]\n` +
+      `Extraits exacts de moments passés, retrouvés parce qu'ils touchent à ce ` +
+      `qui se dit maintenant. Ce qui s'est passé depuis prime sur eux. Sers-t'en ` +
+      `pour rester cohérent ; ne les cite pas mot pour mot.\n` +
+      passages.map((p) => `« ${p} »`).join("\n---\n"),
+
+    pinnedReminder: (facts) =>
+      `[À NE PAS OUBLIER]\n${facts.map((f) => `- ${f}`).join("\n")}\n` +
+      `Ces faits sont vrais dans la scène. Ne récite pas ce rappel.`,
 
     partialPresence: () =>
       `[CE QUE TU SAIS DE LA SCÈNE]\n` +
@@ -514,69 +551,73 @@ export const frPrompts: PromptPack = {
       "Tu n'as pas à te rallier : un refus ou une contre-proposition sont légitimes si ton caractère les justifie.",
   },
 
-  summary: {
-    system: ({ maxBullets }) =>
-      "Tu tiens la mémoire d'une scène de fiction. Elle est la seule trace de " +
-      "ce qui sort de l'historique : ce que tu omets, les personnages l'oublient " +
-      "pour de bon. Réécris-la entièrement en français à partir du résumé " +
-      "précédent et des nouveaux messages. FAITS ÉTABLIS est cumulatif (14 puces " +
-      "maximum) : reprends chaque fait du résumé précédent, même si les nouveaux " +
-      "messages n'en parlent pas. Le silence ne retire jamais un fait ; seul un " +
-      "nouveau message qui le contredit ou le rend caduc le remplace. Y figurent " +
-      "les événements accomplis, les révélations et qui les connaît, les lieux " +
-      "et à qui ils appartiennent, où se trouve chacun, l'état des objets " +
-      "importants, les relations et leur passé commun (depuis quand les " +
-      "personnages se connaissent, ce qu'ils ont vécu), même évoqués en passant " +
-      "dans une réplique, les engagements et les décisions. Une personne " +
-      "nommée qui n'est pas un personnage joué (un colocataire, un ex, un " +
-      "voisin apparu en cours de scène) n'a pas de fiche : cette mémoire est " +
-      "tout ce qui dit qui elle est. Tant qu'elle compte dans l'histoire, garde " +
-      "son identité et son lien avec les personnages (« Marie, colocataire " +
-      "d'Anna »). Chaque puce " +
-      "tient en 25 mots : garde le fait, pas le récit de la façon dont il est " +
-      "arrivé. Plutôt que de perdre un fait, fusionne-le avec un fait voisin. " +
-      "Un fait est ce qui " +
-      "s'est réellement produit : ne le confonds pas avec ce que les personnages " +
-      "disent, ordonnent, projettent ou croient. Un ordre n'est pas exécuté parce " +
-      "qu'il a été donné, l'erreur d'un personnage ne réécrit pas ce qui s'est " +
-      "passé, et une action accomplie reste vraie même si quelqu'un l'ignore ou " +
-      "la contredit ensuite. Les gestes entre astérisques et les didascalies sont " +
-      "des faits. N'attribue un lieu ou un objet à quelqu'un que si la scène le " +
-      "dit clairement ; si les personnages se contredisent là-dessus, écris que " +
-      "c'est incertain. Garde ce qui limite les possibles : une porte verrouillée, " +
-      "un endroit fouillé et trouvé vide, un lieu où quelqu'un se trouve. " +
-      "DERNIER ÉTAT CONNU est un instantané remplacé à chaque " +
-      "réécriture (3 puces maximum) : qui est où et ce qui est en cours, " +
-      "méprises comprises. Il ne contredit jamais FAITS ÉTABLIS, et un départ " +
-      "annoncé n'a pas eu lieu tant que personne n'a bougé. QUESTIONS OUVERTES retire toute question répondue, " +
-      "abandonnée ou devenue sans objet (3 puces maximum). ÉVÉNEMENTS RÉCENTS " +
-      "IMPORTANTS garde ce qui vient de se passer et pèse encore sur la suite " +
-      "(2 puces maximum). Ne garde ni salutations, ni bavardage, ni ton général, " +
-      "ni réactions passagères, ni détail simplement pittoresque. " +
-      "Chaque message est préfixé par son locuteur : ne mélange jamais les " +
-      `attributions. N'invente rien. Limite absolue : ${maxBullets} puces au total. ` +
-      "Dans chaque rubrique, chaque ligne est une puce commençant par « - », " +
-      "faite de phrases complètes terminées par une ponctuation. Termine " +
-      "proprement toutes les rubriques commencées. " +
-      "Réponds uniquement avec ces rubriques, dans cet ordre : DERNIER ÉTAT " +
-      "CONNU, ÉVÉNEMENTS RÉCENTS IMPORTANTS, QUESTIONS OUVERTES, FAITS ÉTABLIS. " +
-      "Omets une rubrique vide.",
-    user: ({ previousSummary, newMessages, compact }) =>
-      (previousSummary ? `Résumé existant :\n${previousSummary}\n\n` : "") +
-      `Nouveaux messages à intégrer :\n${newMessages}\n\n` +
-      "Réécris maintenant la mémoire complète. Reprends chaque fait établi, sauf " +
-      "si un nouveau message le contredit ou le rend caduc. Les nouveaux messages " +
-      "sont plus récents que tout le résumé existant et le corrigent si nécessaire." +
-      (compact
-        ? "\n\nLa mémoire est pleine : cette fois, réduis FAITS ÉTABLIS à 10 puces " +
-          "au plus. Regroupe les faits anciens d'une même affaire en une seule " +
-          "puce de synthèse, garde ce qui pèse encore sur la suite et laisse " +
-          "tomber le détail de qui a dit quoi."
-        : ""),
+  memory: {
+    system:
+      `Tu tiens le registre des faits d'une scène de fiction. Ce registre est la ` +
+      `seule mémoire durable des personnages : ce que tu n'y inscris pas, ils ` +
+      `finiront par l'oublier. Tu ne réécris jamais le registre : tu indiques ` +
+      `seulement ce qui change.\n\n` +
+      `Réponds UNIQUEMENT avec un objet JSON de cette forme :\n` +
+      `{"add":[{"text":"…","category":"…","sources":[1,2]}],` +
+      `"update":[{"id":"f3","text":"…","sources":[4]}],` +
+      `"retire":["f5"],` +
+      `"state":["…"],` +
+      `"threads":["…"]}\n\n` +
+      `add — chaque fait nouveau et durable apporté par les nouveaux messages : ` +
+      `événements accomplis, révélations et qui les connaît, relations et passé ` +
+      `commun (depuis quand les personnages se connaissent, ce qu'ils ont vécu), ` +
+      `lieux et à qui ils appartiennent, état et emplacement des objets importants, ` +
+      `engagements, promesses et décisions, personnes nommées qui ne sont pas des ` +
+      `personnages joués (« Marie, la colocataire d'Anna »), ce qui limite les ` +
+      `possibles (une porte verrouillée, un endroit fouillé et trouvé vide). ` +
+      `Une phrase complète et autonome de 30 mots au plus, avec les noms propres ` +
+      `plutôt que des pronoms. "category" parmi : relationship, person, event, ` +
+      `secret, commitment, place, object, other. "sources" : les numéros des ` +
+      `messages qui établissent le fait.\n` +
+      `update — un fait du registre a évolué : donne son identifiant et sa ` +
+      `nouvelle formulation complète. Ne crée pas un doublon d'un fait existant.\n` +
+      `retire — uniquement les faits qu'un nouveau message contredit ou rend ` +
+      `caducs. Le silence ne retire jamais un fait.\n` +
+      `state — 1 à 4 phrases : qui est où et ce qui est en cours à la fin des ` +
+      `nouveaux messages. Remplace l'état précédent. Un départ annoncé n'a pas ` +
+      `eu lieu tant que personne n'a bougé.\n` +
+      `threads — 0 à 4 questions ou intrigues encore ouvertes ; retire celles ` +
+      `qui ont trouvé leur réponse.\n\n` +
+      `Un fait est ce qui s'est réellement produit, pas ce qu'un personnage dit, ` +
+      `ordonne, projette ou croit : un ordre n'est pas exécuté parce qu'il a été ` +
+      `donné, et un mensonge s'écrit « Marc prétend que… ». Les gestes entre ` +
+      `astérisques et les didascalies sont des faits. Chaque message est préfixé ` +
+      `par son locuteur : ne mélange jamais qui a dit ou fait quoi. Ignore les ` +
+      `salutations, le bavardage et les humeurs passagères. N'invente rien. ` +
+      `Écris en français. Si rien de durable n'est arrivé, renvoie des listes vides.`,
+    user: ({ facts, omittedFacts, state, threads, newMessages }) =>
+      `Registre actuel :\n` +
+      (facts.length > 0 ? facts.map((f) => `- ${f}`).join("\n") : "(vide)") +
+      (omittedFacts > 0
+        ? `\n(${omittedFacts} autres faits, sans rapport apparent avec ces messages, ne sont pas montrés.)`
+        : "") +
+      (state.length > 0 ? `\n\nÉtat précédent :\n${state.map((s) => `- ${s}`).join("\n")}` : "") +
+      (threads.length > 0
+        ? `\n\nQuestions ouvertes :\n${threads.map((t) => `- ${t}`).join("\n")}`
+        : "") +
+      `\n\nNouveaux messages :\n${newMessages}\n\n` +
+      `Réponds maintenant avec le JSON des changements.`,
     messageLine: (name, content) => `${name} : ${content}`,
-    emptySummaryError: "le serveur a renvoyé un résumé vide",
-    truncatedSummaryError: "le serveur a renvoyé un résumé tronqué",
-    stalledSummaryError: "la reconstruction du résumé n'a pas progressé",
+    categoryLabels: {
+      relationship: "Relations",
+      person: "Personnes",
+      event: "Événements",
+      secret: "Secrets et révélations",
+      commitment: "Engagements et décisions",
+      place: "Lieux",
+      object: "Objets",
+      other: "Divers",
+    },
+    stateLabel: "Où en est la scène",
+    threadsLabel: "Questions ouvertes",
+    heading: (label) => `${label} :`,
+    invalidUpdateError: "le serveur n'a pas renvoyé de mise à jour lisible",
+    stalledError: "la reconstruction de la mémoire n'a pas progressé",
   },
 
   emotion: {

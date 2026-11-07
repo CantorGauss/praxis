@@ -34,7 +34,7 @@ export function knownContextFor(
   const recent = transcript
     .slice(Math.max(0, stimulusIndex - KNOWN_CONTEXT_TURNS), Math.max(0, stimulusIndex))
     .map((m) =>
-      m.role === "assistant" ? pack.summary.messageLine(speakerName, m.content) : m.content,
+      m.role === "assistant" ? pack.memory.messageLine(speakerName, m.content) : m.content,
     )
     .join("\n\n")
     .slice(-KNOWN_CONTEXT_MAX_CHARS);

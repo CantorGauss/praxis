@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { assemblePrompt, estimateTokens, type AssembleInput } from "../promptAssembler";
+import {
+  assemblePrompt,
+  estimateTokens,
+  type AssembleInput,
+  type PromptMemory,
+} from "../promptAssembler";
 import { buildTemporalContext } from "../temporal";
 import { enPrompts, frPrompts } from "../../i18n/prompts";
-import type { Message, Persona } from "../../types";
+import type { MemoryFact, Message, Persona } from "../../types";
 
 function persona(overrides: Partial<Persona> = {}): Persona {
   return {
@@ -44,6 +49,24 @@ function message(
   };
 }
 
+function fact(text: string, extra: Partial<MemoryFact> = {}): MemoryFact {
+  return {
+    id: extra.id ?? `f${text.length}`,
+    text,
+    category: "event",
+    pinned: false,
+    origin: "auto",
+    sourceMessageIds: [],
+    createdAt: "",
+    updatedAt: "",
+    ...extra,
+  };
+}
+
+function mem(...texts: string[]): PromptMemory {
+  return { facts: texts.map((t, i) => fact(t, { id: `f${i + 1}` })), state: [], threads: [] };
+}
+
 /**
  * Les assertions portent sur les intitulés de sections, donc sur une langue
  * précise. Le pack français sert de référence : c'est le plus contraint, et
@@ -57,7 +80,7 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
     state: null,
     pack: frPrompts,
     temporal: buildTemporalContext(new Date(2026, 6, 23, 10, 0), null, frPrompts),
-    summary: null,
+    memory: null,
     recentMessages: [
       message("1", "user", "Bonjour"),
       message("2", "assistant", "Bonjour Jeff"),
@@ -72,7 +95,7 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
 describe("assemblePrompt", () => {
   it("includes current agreements after the history and reserves their context budget", () => {
     const coordination = "[COORDINATION] Marc accepte sous condition : moins de vingt euros.";
-    const input = baseInput({ coordination, summary: "Un ancien résumé." });
+    const input = baseInput({ coordination, memory: mem("Un ancien fait.") });
     const result = assemblePrompt(input);
     expect(result.error).toBeNull();
     expect(result.system).not.toContain(coordination);
@@ -102,7 +125,7 @@ describe("assemblePrompt", () => {
         closeness: 0.5,
         updatedAt: "2026-07-23T08:00:00Z",
       },
-      summary: "Résumé antérieur.",
+      memory: mem("Fait antérieur."),
     });
     const result = assemblePrompt(input);
     expect(result.error).toBeNull();
@@ -111,7 +134,7 @@ describe("assemblePrompt", () => {
       "[IDENTITÉ]",
       "[INTERLOCUTEUR HUMAIN]",
       "[TRAITS STABLES]",
-      "[RÉSUMÉ DE LA CONVERSATION]",
+      "[MÉMOIRE DE LA SCÈNE]",
     ];
     let last = -1;
     for (const section of order) {
@@ -172,15 +195,15 @@ describe("assemblePrompt", () => {
     expect(result.includedMessageCount).toBeLessThan(3);
   });
 
-  it("abandonne le résumé avant les souvenirs quand le budget est serré", () => {
+  it("abandonne la mémoire avant les répliques récentes quand le budget est serré", () => {
     const input = baseInput({
-      summary: "s".repeat(4000),
+      memory: mem("s".repeat(4000)),
       contextTokens: 1250,
       reserveOutputTokens: 200,
     });
     const result = assemblePrompt(input);
     expect(result.error).toBeNull();
-    expect(result.summaryIncluded).toBe(false);
+    expect(result.memoryIncluded).toBe(false);
     expect(result.system).toContain("[IDENTITÉ]");
   });
 
@@ -200,7 +223,7 @@ describe("assemblePrompt", () => {
   it("garde un préfixe identique quand seuls l'heure et l'humeur changent", () => {
     // L'invariant qui rend le cache d'attention réutilisable : deux tours
     // successifs ne doivent différer qu'à la toute fin du prompt.
-    const commun = { summary: "Résumé antérieur." };
+    const commun = { memory: mem("Fait antérieur.") };
     const tour1 = assemblePrompt(
       baseInput({
         ...commun,
@@ -237,7 +260,7 @@ describe("assemblePrompt", () => {
     const sauf = (r: typeof tour1) => r.messages.slice(0, -1);
     expect(sauf(tour1)).toEqual(sauf(tour2));
     expect(tour1.system).toBe(tour2.system);
-    expect(tour1.system).toContain("Résumé antérieur.");
+    expect(tour1.system).toContain("Fait antérieur.");
     // Seule la fin diffère.
     expect(tour1.messages.at(-1)).not.toEqual(tour2.messages.at(-1));
   });
@@ -372,12 +395,12 @@ describe("assemblePrompt selon la langue de jeu", () => {
 
   it("garde le même ordre déterministe dans les deux langues", () => {
     const sections = {
-      en: ["[IDENTITY]", "[HUMAN INTERLOCUTOR]", "[STABLE TRAITS]", "[CONVERSATION SUMMARY]"],
-      fr: ["[IDENTITÉ]", "[INTERLOCUTEUR HUMAIN]", "[TRAITS STABLES]", "[RÉSUMÉ DE LA CONVERSATION]"],
+      en: ["[IDENTITY]", "[HUMAN INTERLOCUTOR]", "[STABLE TRAITS]", "[SCENE MEMORY]"],
+      fr: ["[IDENTITÉ]", "[INTERLOCUTEUR HUMAIN]", "[TRAITS STABLES]", "[MÉMOIRE DE LA SCÈNE]"],
     };
     for (const pack of [enPrompts, frPrompts]) {
       const result = assemblePrompt(
-        baseInput({ pack, summary: "Previous summary." }),
+        baseInput({ pack, memory: mem("Previous fact.") }),
       );
       let last = -1;
       for (const section of sections[pack.locale]) {
@@ -558,5 +581,83 @@ describe("assemblePrompt en scène de groupe", () => {
     const sent = result.messages.slice(1).map((m) => m.content).join("\n");
     expect(sent).toContain("Quel beau pull.");
     expect(sent).not.toContain("affreux");
+  });
+});
+
+describe("assemblePrompt — mémoire de scène", () => {
+  it("transmet les faits par catégorie, l'état, et rappelle les faits épinglés en fin de requête", () => {
+    const memory: PromptMemory = {
+      facts: [
+        fact("Anna et Marc sont amis d'enfance.", { id: "f1", category: "relationship" }),
+        fact("La porte de la cave est verrouillée.", { id: "f2", category: "place", pinned: true }),
+      ],
+      state: ["Anna est dans la cuisine."],
+      threads: ["Qui a pris la clé ?"],
+    };
+    const result = assemblePrompt(baseInput({ memory }));
+    expect(result.system).toContain("[MÉMOIRE DE LA SCÈNE]");
+    expect(result.system).toContain("Relations :\n- Anna et Marc sont amis d'enfance.");
+    expect(result.system).toContain("À ne jamais oublier :\n- La porte de la cave est verrouillée.");
+    expect(result.system).toContain("[OÙ EN ÉTAIT LA SCÈNE]");
+    expect(result.system).toContain("Qui a pris la clé ?");
+    const tail = result.messages.at(-1)!.content;
+    expect(tail).toContain("[À NE PAS OUBLIER]");
+    expect(tail).toContain("La porte de la cave est verrouillée.");
+    expect(result.factCount).toBe(2);
+  });
+
+  it("garde les faits épinglés et les plus pertinents quand le registre déborde", () => {
+    const filler = Array.from({ length: 80 }, (_, i) =>
+      fact(`Détail sans importance numéro ${i} sur la météo du mardi précédent.`, { id: `f${i + 10}` }),
+    );
+    const memory: PromptMemory = {
+      facts: [
+        fact("Le testament est caché derrière le tableau du salon.", { id: "f1", category: "secret" }),
+        ...filler,
+        fact("Marc doit cinq cents euros à Anna.", { id: "f2", pinned: true, category: "commitment" }),
+      ],
+      state: [],
+      threads: [],
+    };
+    const result = assemblePrompt(
+      baseInput({
+        memory,
+        contextTokens: 4096,
+        recentMessages: [message("1", "user", "Où est le testament ?")],
+      }),
+    );
+    expect(result.error).toBeNull();
+    expect(result.system).toContain("Le testament est caché derrière le tableau du salon.");
+    expect(result.system).toContain("Marc doit cinq cents euros à Anna.");
+    expect(result.factCount).toBeLessThan(memory.facts.length);
+  });
+
+  it("retrouve mot pour mot un passage ancien en rapport avec la dernière réplique", () => {
+    const archive = [
+      message("1", "assistant", "Le colis bleu est arrivé chez la voisine Germaine."),
+      message("2", "user", "Il pleut beaucoup aujourd'hui."),
+      message("3", "assistant", "J'ai mangé une pomme."),
+      message("4", "user", "Le train était en retard."),
+    ];
+    const result = assemblePrompt(
+      baseInput({
+        archive,
+        recentMessages: [message("5", "user", "Au fait, où est passé le colis bleu ?")],
+      }),
+    );
+    const tail = result.messages.at(-1)!.content;
+    expect(tail).toContain("[SOUVENIRS DE PLUS TÔT DANS LA SCÈNE]");
+    expect(tail).toContain("Le colis bleu est arrivé chez la voisine Germaine.");
+    expect(tail).not.toContain("J'ai mangé une pomme.");
+    expect(result.recalledPassageCount).toBe(1);
+  });
+
+  it("ne rappelle rien quand l'archive n'a aucun rapport", () => {
+    const archive = [message("1", "assistant", "J'ai mangé une pomme.")];
+    const result = assemblePrompt(
+      baseInput({ archive, recentMessages: [message("2", "user", "Quel temps fait-il ?")] }),
+    );
+    expect(result.messages.at(-1)!.content).not.toContain("[SOUVENIRS");
+    expect(result.recalledPassageCount).toBe(0);
   });
 });
