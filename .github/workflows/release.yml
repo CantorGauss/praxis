@@ -1,0 +1,88 @@
+name: Release
+
+# Pushing a tag like v0.1.0 builds the installers on all three systems, attaches
+# them to a draft release, and publishes it once every build has succeeded.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            platform: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+          - name: Windows
+            platform: windows-latest
+            args: --bundles nsis
+          # The oldest supported runner keeps the Linux builds compatible with
+          # older glibc versions.
+          - name: Linux
+            platform: ubuntu-22.04
+            args: --bundles appimage,deb
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Praxis ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+          releaseBody: |
+            A little theatre that lives on your desktop: write characters, put them in a room, and let them talk.
+
+            ## Download
+
+            - **macOS** (Apple Silicon and Intel): the `.dmg`
+            - **Windows**: the `-setup.exe`
+            - **Linux**: the `.AppImage`, or the `.deb` on Debian and Ubuntu
+
+            You also need a model: one running locally (Ollama, LM Studio, llama.cpp…) or an OpenRouter key. The first launch walks you through it.
+
+            ## The app is not signed yet
+
+            - **macOS**: open the `.dmg` and drag Praxis into Applications. The first time, macOS refuses to open it: go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. If macOS says the app is damaged, run `xattr -dr com.apple.quarantine /Applications/Praxis.app` in Terminal.
+            - **Windows**: if SmartScreen warns you, click **More info → Run anyway**.
+            - **Linux**: make the AppImage executable (`chmod +x Praxis_*.AppImage`) and run it.
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false --latest

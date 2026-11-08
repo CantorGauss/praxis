@@ -36,6 +36,16 @@ your disk. No account, no telemetry.
 
 ![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
+## Download
+
+Grab the installer for your system from the
+[latest release](https://github.com/CantorGauss/praxis/releases/latest): a
+`.dmg` for macOS, a `-setup.exe` for Windows, an `.AppImage` or `.deb` for Linux.
+
+The app isn't signed yet. On macOS, the first launch is blocked: open
+**System Settings → Privacy & Security** and click **Open Anyway**. On Windows,
+click **More info → Run anyway** if SmartScreen complains.
+
 ## What it doesn't do
 
 - Characters don't remember facts from one conversation to the next — only who
@@ -52,7 +62,7 @@ your disk. No account, no telemetry.
 
 API keys live in your system keychain, never in the database or in exports.
 
-## Install from source
+## Build from source
 
 You need [Git](https://git-scm.com), [Node.js](https://nodejs.org) 20+ and
 [Rust](https://rustup.rs), plus the
