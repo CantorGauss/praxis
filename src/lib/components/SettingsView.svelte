@@ -721,6 +721,17 @@
       </label>
       <span class="hint">{s.settings.sceneTwistsHint(TWIST_COOLDOWN_LINES)}</span>
     </div>
+    <div class="field checkbox">
+      <label>
+        <input
+          type="checkbox"
+          bind:checked={app.settings.sceneEffects}
+          onchange={() => void persist()}
+        />
+        {s.settings.sceneEffects}
+      </label>
+      <span class="hint">{s.settings.sceneEffectsHint}</span>
+    </div>
   </section>
   <section>
     <h3>{s.settings.characterBehaviour}</h3>

@@ -391,6 +391,12 @@ export const enUi = {
     },
   },
 
+  effects: {
+    unanimous: (text: string) => `🎉 Unanimous: "${text}"`,
+    ovation: "🌹 A triumph! Standing ovation",
+    tomatoes: "🍅 The audience is throwing tomatoes",
+  },
+
   twist: {
     button: "Twist",
     title: "Make something happen in the scene",
@@ -595,6 +601,11 @@ export const enUi = {
       "themselves. 0 for them to always wait for your message. Typing in the " +
       "input pushes the deadline back.",
     sceneTwists: "Twists when the scene goes in circles",
+    sceneEffects: "Stage effects",
+    sceneEffectsHint:
+      "Confetti when everyone agrees, the stage shaking when someone shouts, " +
+      "laughter floating up, a spotlight on twists. Purely visual; also off " +
+      "when your system asks for reduced motion.",
     sceneTwistsHint: (lines: number) =>
       "When the characters repeat themselves without you, the model writes a " +
       "stage direction that shakes things up: news arriving, an incident, an " +

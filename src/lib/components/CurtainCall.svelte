@@ -4,6 +4,7 @@
   import Avatar from "./Avatar.svelte";
   import { t } from "../i18n/ui.svelte";
   import { personaAccent } from "../services/avatar";
+  import { sceneFx } from "../state/sceneFx.svelte";
   import {
     computeAwards,
     MIN_LINES_FOR_REVIEW,
@@ -20,6 +21,24 @@
   );
   const review = $derived(entry?.review ?? null);
   const tooEarly = $derived(stats.lines < MIN_LINES_FOR_REVIEW);
+
+  // Le public réagit à la note, une fois, au moment où la critique paraît.
+  let lastStatus: string | undefined = undefined;
+  $effect(() => {
+    const status = entry?.status;
+    const stars = entry?.review?.stars ?? null;
+    const appeared = lastStatus === "loading" && status === "ready";
+    lastStatus = status;
+    if (!appeared || !app.curtainCallOpen || stars === null) return;
+    if (stars >= 4) {
+      sceneFx.rain();
+      sceneFx.rain({ emoji: "🌹", count: 14 });
+      sceneFx.banner(s.effects.ovation);
+    } else if (stars <= 1) {
+      sceneFx.rain({ emoji: "🍅" });
+      sceneFx.banner(s.effects.tomatoes);
+    }
+  });
 
   function nameOf(id: string): string {
     return app.sceneCast.find((p) => p.id === id)?.name ?? "?";

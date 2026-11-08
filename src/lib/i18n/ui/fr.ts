@@ -393,6 +393,12 @@ export const frUi: UiStrings = {
     },
   },
 
+  effects: {
+    unanimous: (text: string) => `🎉 Accord unanime : « ${text} »`,
+    ovation: "🌹 Triomphe ! Le public est debout",
+    tomatoes: "🍅 Le public jette des tomates",
+  },
+
   twist: {
     button: "Imprévu",
     title: "Faire arriver quelque chose dans la scène",
@@ -601,6 +607,12 @@ export const frUi: UiStrings = {
       "parole entre eux. 0 pour qu'ils attendent toujours votre message. Taper " +
       "dans la zone de saisie repousse l'échéance.",
     sceneTwists: "Imprévus quand la scène tourne en rond",
+    sceneEffects: "Effets de scène",
+    sceneEffectsHint:
+      "Confettis quand tout le monde tombe d'accord, la scène qui tremble quand " +
+      "quelqu'un crie, des rires qui s'envolent, un coup de projecteur sur les " +
+      "imprévus. Purement visuel ; coupé aussi quand le système demande moins " +
+      "d'animations.",
     sceneTwistsHint: (lines: number) =>
       "Quand les personnages se répètent sans vous, le modèle écrit une " +
       "didascalie qui relance la scène : une nouvelle qui tombe, un incident, " +

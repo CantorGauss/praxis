@@ -408,6 +408,11 @@ export type AppSettings = {
    */
   sceneTwists: boolean;
   /**
+   * Effets de scène purement visuels : confettis à l'unanimité, scène qui
+   * tremble quand on crie, rires qui s'envolent. Sans effet sur les prompts.
+   */
+  sceneEffects: boolean;
+  /**
    * Nombre de messages non résumés au-delà duquel un résumé est déclenché.
    * Borne le coût de chaque requête indépendamment de la longueur des
    * répliques : au-delà, les plus anciennes passent dans le résumé.
@@ -434,6 +439,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sceneAutoRounds: 1,
   idleChatterSeconds: 30,
   sceneTwists: true,
+  sceneEffects: true,
   historyWindowMessages: 30,
 };
 

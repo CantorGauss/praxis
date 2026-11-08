@@ -123,6 +123,7 @@ export const settingsRepo = {
         DEFAULT_SETTINGS.idleChatterSeconds,
       ),
       sceneTwists: parse("sceneTwists", DEFAULT_SETTINGS.sceneTwists),
+      sceneEffects: parse("sceneEffects", DEFAULT_SETTINGS.sceneEffects),
       historyWindowMessages,
     };
   },
