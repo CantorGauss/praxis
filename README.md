@@ -2,303 +2,85 @@
 
 A little theatre that lives on your desktop.
 
-You write characters. They show up, they argue with each other, they get annoyed
-with you, and they're still in a mood about it tomorrow morning.
+You write characters, put them in a room, and they talk — to you and to each
+other. They want things, keep secrets, hold grudges, and carry on without you
+when you go quiet.
 
-Praxis plugs into any OpenAI-compatible endpoint — a model on your own machine,
-or a hosted gateway like OpenRouter. Everything it stores lives in one SQLite
-file on your disk. No account, no telemetry, no cloud anything.
+Praxis works with any OpenAI-compatible model: one running on your machine, or
+a hosted gateway like OpenRouter. Everything is stored in one SQLite file on
+your disk. No account, no telemetry.
 
 ![Three characters mid-scene, each answering in their own right](docs/screenshots/chat-stage.png)
 
-## What actually happens
+## What you can do
 
-**You put more than one of them in a room.** This is the fun part. Invite Anna
-and Marc into the same conversation and they talk *to each other*, not just to
-you. Each gets their own request under the hood, so each keeps their own
-personality, mood and settings — and each one sees what the others just said.
-
-Say something vague and everyone chimes in. Write `@Marc` and only Marc answers.
-Or hand the floor to the model: it looks at what was just said and decides who
-would actually react. It chooses one speaker at a time and reassesses after
-every reply: Anna can answer Marc immediately, without waiting for a whole
-round of the room. Sometimes nobody has anything to add. Direct questions get
-priority in the scene-order mode too; explicit mentions still select who answers.
-
-**They can agree on something and remember what they agreed to.** Group messages
-carry a short, inferred intention — question, proposal, objection, agreement —
-and a reference to the message being answered. The **Proposals and agreements**
-panel follows concrete suggestions and each participant's position, with links
-back to their words. A conditional yes stays conditional; silence never counts
-as consent. Revising a proposal requires fresh agreements. The current cast
-forms the decision group; you join it when you propose something or a proposal
-is addressed to you. The group stays fixed for that proposal even if someone
-later leaves the scene.
-
-These observations are stored with their source messages, included in backups,
-and supplied to later speakers alongside the recent dialogue. Editing or
-regenerating a message removes its previous contribution. Existing conversations
-remain readable; earlier messages are not automatically reanalyzed in bulk.
-Short analysis requests use your selected connection, independently of mood
-analysis, and may add a pause between replies. If the model cannot produce a
-usable analysis, ordinary dialogue continues without inventing an agreement.
-
-Then step back and let them run. Set the scene to keep going on its own for a
-turn or three after your message, or go quiet and watch them pick the
-conversation back up without you.
-
-Click **Stay silent** beside the composer to let the characters keep talking
-without waiting for your turn, even at the start of a scene. **Take the floor**
-or send a message to let the current line finish and join back in. This mode
-stays with the open conversation and overrides the usual automatic-turn limit.
-
-However fast the model writes, lines appear at reading pace — with a breath at
-every comma and full stop — and the next character waits until you've read the
-last one. Pick slow, normal, fast or instant in Settings, or click **Show it
-all** to skip ahead.
-
-**Each of them wants something.** When a group scene starts, or someone walks
-in, the model hands every character a secret goal for the scene — get a
-confession out of Marc, keep the keys, make Anna leave before midnight —
-written to cut across someone else's, sometimes with a secret attached. Each
-character only knows their own, and works toward it line after line, so the
-scene keeps moving even when you say nothing. The director picks whoever has the
-most to gain by speaking next, twists aim at what people are after, and the
-morning-after review says who got what they wanted. Goals stay hidden in the
-cast panel until you peek; you can rewrite them, clear one, or deal a new hand.
-One extra request per cast, and you can switch it off in Settings.
-
-**When they go in circles, something happens.** Characters are told to move the
-scene forward — disagree, reveal, decide — rather than politely agree. If the
-last few lines still keep circling the same words, or everyone just nods along,
-the next speaker is nudged to shake things up. Left on their own, the model may
-also drop in a short stage direction of its own (marked ✦): news arriving, an
-incident, an unexpected gesture. At most once every eight lines, never right
-after you speak, and you can switch it off in Settings.
-
-Or roll the die yourself. The **🎲 Twist** button beside the composer asks for
-one right now, in the flavour you pick — surprise, disaster, romance, absurd,
-mystery or coup de théâtre — and someone in the room reacts to it. If a
-character is mid-line, the twist lands as soon as they finish.
-
-**They say things behind each other's backs.** In a group scene a character can
-slip in an aside to the audience: `(aside: I never liked this cake)`. You see
-it, set apart in their bubble; nobody else on stage does — it never reaches the
-other characters, the director or the shared memory. Every so often a
-character is nudged to try one. You can do the same from the **+** menu.
-
-**And then the reviews come in.** Click **🎭 Curtain** in the header to pause
-the scene and read tomorrow's paper: a model-written review with a made-up
-masthead and a star rating — the critic was in the audience and heard every
-aside — plus the evening's awards, worked out from what actually happened on
-stage: most words, angriest line, most objections, most "yes, but…", the
-potted plant who barely spoke, the best twist. Raise the curtain and the scene
-picks up where it left off.
-
-**They're in a mood, and it lasts.** Before a character answers, Praxis works
-out how they'd actually feel about what just happened — startled, delighted,
-furious, quietly hurt — and that colours how they write. Drop something heavy on
-Marc and he won't shrug it off two lines later.
-
-The mood is attached to the character, not the conversation. It follows them
-everywhere and drifts back toward calm over hours and days, so nothing gets
-stuck. The ring around their portrait shows where they are. If you'd rather they
-stayed even-tempered, switch the whole thing off.
-
-**You set the stage.** Give a conversation a place, a time, what just happened
-before the curtain went up — every character present takes it as read. Write
-`*puts the keys down and doesn't sit*` and they'll read it as a gesture, not a
-line of dialogue. They'll do the same back.
-
-Characters can walk in and out mid-scene, and you write the stage direction:
-"Gwendoline pushes the door open, soaked." Everyone in the room notices.
-
-**Everything about them is one page.** A name, a line of description, the
-pronouns others use for them, and a prompt in your own words. Pick a portrait
-from the built-in set, set how long their answers run, how loose their tone is.
-Four ready-made characters are there if you'd rather edit than start blank.
+- **Group scenes.** Several characters share a conversation, each with their
+  own personality and mood. A director picks who speaks next; `@Marc` makes
+  Marc answer.
+- **Secret goals.** At the start of a scene, each character gets something to
+  win — usually at someone else's expense — so the story moves even when you say
+  nothing. Peek at the goals in the cast panel, or rewrite them.
+- **Let it run.** Click **Stay silent** and watch. Lines appear at reading pace
+  and the next character waits until you've read the last one.
+- **Twists and asides.** Roll the 🎲 for something unexpected. Characters
+  whisper asides only you can hear.
+- **Moods that last.** What happens colours how characters feel and write, and
+  the mood follows them into the next conversation.
+- **A memory that keeps the plot.** Long scenes are kept as a list of facts you
+  can read, correct and pin. Characters only know what happened in front of
+  them.
+- **Curtain call.** Pause the scene to read a made-up review with stars and
+  awards.
+- **English or French**, for the interface and for the characters,
+  independently.
 
 ![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
-**Long conversations don't get slow, or lose the plot.** Past a certain point,
-older messages are read into a ledger of facts: relationships, events, secrets,
-promises, who is where. Each fact is kept on its own and only goes when the
-scene contradicts it, so nothing quietly falls out of memory as the evening
-drags on. A character only knows the facts established in front of them. When
-the scene comes back to something old — a name, an object, a promise — the
-original lines are found again and handed back word for word. Open **Scene
-memory** to read the ledger, correct a fact, add your own, or pin what must
-never be forgotten: pinned facts are restated right before every line.
-
-**Two languages, deliberately unlinked.** The app speaks English or French. The
-characters speak English or French. Separately — because the prompt language is
-what a character actually speaks in, and wanting an English interface with
-French-speaking characters is a perfectly reasonable thing to want.
-
 ## What it doesn't do
 
-Worth saying out loud, so nothing surprises you:
+- Characters don't remember facts from one conversation to the next — only who
+  they are and how they feel.
+- No web search, tools, voice or images.
+- It's only as good as the model you plug in.
 
-- **Characters don't carry facts between conversations.** Within a conversation
-  they've got the whole thread. Start a new one and it's a blank page — they
-  remember *being* themselves, and what kind of mood they're in, not what you
-  told them last Tuesday.
-- No web search, no file reading, no tools, no agents. It's a chat app for
-  characters, not a workbench.
-- No voice, no image generation.
-- Quality is entirely down to the model you point it at. A small local model
-  will play a small local model.
+## Choosing a model
 
-## Pointing it at a model
+- **Local:** run Ollama, llama.cpp, LM Studio or similar, load a model, and give
+  Praxis its address. Nothing leaves your machine.
+- **Hosted:** pick the OpenRouter preset in Settings, paste your key, choose a
+  model. Remote connections must be turned on one by one, on purpose.
 
-Praxis doesn't ship a model or manage one for you. You bring the endpoint.
+API keys live in your system keychain, never in the database or in exports.
 
-**Local.** Run [Ollama](https://ollama.com),
-[llama.cpp](https://github.com/ggml-org/llama.cpp), LM Studio, mlx-serve —
-whatever you already use — load a model, and hand Praxis the address. Presets
-fill in the usual ports. Nothing leaves the machine.
+## Install from source
 
-**Hosted.** [OpenRouter](https://openrouter.ai) and friends work identically:
-pick the preset, paste your key, choose a model. Any connection that leaves your
-computer has to be turned on **deliberately, one at a time**, and Praxis tells
-you in plain language that those conversations will reach that provider.
-
-Keep as many connections as you like side by side — a local model and a remote
-gateway, two models on the same server — each with its own address, key, model
-and timeout. Switching is one click in the header.
-
-API keys go in your system keychain, one per connection. Never in the database,
-never in an export. Delete a connection and its key goes with it.
-
-## Run it from source
-
-Praxis is a [Tauri 2](https://v2.tauri.app) desktop application. Every platform
-needs [Git](https://git-scm.com), [Node.js](https://nodejs.org) 20 or newer, and
-the stable [Rust toolchain](https://rustup.rs). Install the platform dependencies
-below, then clone the project and install its JavaScript packages:
+You need [Git](https://git-scm.com), [Node.js](https://nodejs.org) 20+ and
+[Rust](https://rustup.rs), plus the
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
+system (Xcode Command Line Tools on macOS, C++ Build Tools and WebView2 on
+Windows, WebKitGTK on Linux).
 
 ```bash
 git clone https://github.com/CantorGauss/praxis.git
 cd praxis
 npm install
+npm run tauri dev
 ```
 
-The first launch walks you through the interface and character languages,
-testing your model server, selecting a model, and creating a first character.
+The first launch walks you through languages, the model connection and a first
+character.
 
-### macOS
-
-Praxis supports macOS 10.15 and later. Install the Xcode Command Line Tools if
-they are not already present:
-
-```bash
-xcode-select --install
-```
-
-Start the app from the repository:
-
-```bash
-npm run tauri -- dev
-```
-
-For a double-clickable development launcher, run:
-
-```bash
-./scripts/build-app.sh
-```
-
-This creates `Praxis.app` at the project root. You can move it to `/Applications`,
-but keep the repository in place: the launcher points back to it and runs the
-development build. If it cannot start, its log is at
-`~/Library/Logs/Praxis-launcher.log`.
-
-To build a standalone application bundle instead:
-
-```bash
-npm run tauri -- build --bundles app
-```
-
-### Windows
-
-Install the [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-and select **Desktop development with C++** in the installer. Praxis also needs
-the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/),
-which is already included with Windows 10 version 1803 and later.
-
-Install Rust from PowerShell, restart the terminal, and select the MSVC
-toolchain:
-
-```powershell
-winget install --id Rustlang.Rustup
-rustup default stable-msvc
-```
-
-Then clone and run Praxis:
-
-```powershell
-git clone https://github.com/CantorGauss/praxis.git
-Set-Location praxis
-npm install
-npm run tauri -- dev
-```
-
-Build an `.exe` installer with NSIS:
-
-```powershell
-npm run tauri -- build --bundles nsis
-```
-
-The installer is written below `src-tauri\target\release\bundle\`. An MSI can be
-built with `--bundles msi`; if that build reports a `light.exe` error, enable
-the optional **VBSCRIPT** Windows feature as described in the
-[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#windows).
-
-### Linux
-
-Install Rust and the native Tauri libraries. On Debian or Ubuntu:
-
-```bash
-sudo apt update
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
-  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
-```
-
-Tauri lists the equivalent packages for Arch, Fedora, openSUSE, Alpine, Gentoo,
-and other distributions in its
-[Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
-
-Clone the repository as shown above, then run Praxis:
-
-```bash
-npm run tauri -- dev
-```
-
-Build Debian and AppImage packages with:
-
-```bash
-npm run tauri -- build --bundles deb,appimage
-```
-
-The packages are written below `src-tauri/target/release/bundle/`. Build on the
-same operating system you intend to package; these commands do not cross-compile
-the macOS, Windows, and Linux desktop bundles.
+To build an installable app, run `npm run tauri -- build --bundles <type>`
+with `app` on macOS, `nsis` on Windows, or `deb,appimage` on Linux. On macOS,
+`./scripts/build-app.sh` also creates a double-clickable `Praxis.app` that runs
+the development build.
 
 ## Your data
 
-One SQLite file in your user application data directory, plus any portraits you
-import. Settings → Data exports the whole thing as JSON, imports it back, or
-wipes it.
+One SQLite file in your app data folder. Settings → Data exports it as JSON,
+imports it back, or wipes it.
 
-How private your conversations are depends on the connection. Local server:
-they never leave. Hosted gateway: they reach that provider, which is exactly why
-you have to enable each remote connection on purpose.
-
-## Hacking on it
-
-```bash
-npm run tauri dev
-```
+## Development
 
 ```bash
 npm test
@@ -308,24 +90,12 @@ npm test
 npm run check
 ```
 
-[Tauri 2](https://tauri.app) + [SvelteKit](https://kit.svelte.dev) + TypeScript,
-on Svelte 5 runes. Network calls go through Rust, never straight out of the
-webview. The interesting bits live in [`src/lib/services`](src/lib/services) —
-prompt assembly, mood decay, summarisation, speaker selection after every reply,
-and the coordination ledger that tracks intentions, proposals, objections, and
-agreements. The scene logic rewrites the transcript from each speaker's point
-of view.
-
-Translations are in [`src/lib/i18n`](src/lib/i18n). English is the reference
-pack; French is type-checked against it, so a missing key fails the build.
-Adding a language is one file under `i18n/ui/` and one under `i18n/prompts/` —
-though note the prompt packs aren't translations of each other. French needs
-explicit gender-agreement instructions that English has no use for, and that
-slot carries pronoun instructions instead.
+Tauri 2, SvelteKit, TypeScript and Svelte 5. The scene logic lives in
+[`src/lib/services`](src/lib/services), translations in
+[`src/lib/i18n`](src/lib/i18n) (English is the reference; French is
+type-checked against it).
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
-
-The 32 built-in portraits are AI-generated fictional faces made for this
-project; details in [static/avatars/README.md](static/avatars/README.md).
+MIT — see [LICENSE](LICENSE). The built-in portraits are AI-generated fictional
+faces; see [static/avatars/README.md](static/avatars/README.md).
