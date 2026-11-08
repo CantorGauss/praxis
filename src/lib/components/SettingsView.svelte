@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { REVEAL_SPEED_OPTIONS } from "../services/reveal";
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
   import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
   import { app } from "../state/appState.svelte";
@@ -725,6 +726,17 @@
       <label>
         <input
           type="checkbox"
+          bind:checked={app.settings.sceneObjectives}
+          onchange={() => void persist()}
+        />
+        {s.settings.sceneObjectives}
+      </label>
+      <span class="hint">{s.settings.sceneObjectivesHint}</span>
+    </div>
+    <div class="field checkbox">
+      <label>
+        <input
+          type="checkbox"
           bind:checked={app.settings.sceneEffects}
           onchange={() => void persist()}
         />
@@ -883,6 +895,28 @@
           >
             <strong>{s.settings.textSizes[value].label}</strong>
             <small>{s.settings.textSizes[value].description}</small>
+          </button>
+        {/each}
+      </div>
+    </div>
+    <div class="appearance-group">
+      <div>
+        <strong>{s.settings.revealSpeed}</strong>
+        <small>{s.settings.revealSpeedHint}</small>
+      </div>
+      <div class="preference-grid reveal-grid">
+        {#each REVEAL_SPEED_OPTIONS as value (value)}
+          <button
+            class="preference-choice"
+            class:selected={app.settings.revealSpeed === value}
+            aria-pressed={app.settings.revealSpeed === value}
+            onclick={() => {
+              app.settings.revealSpeed = value;
+              void persist();
+            }}
+          >
+            <strong>{s.settings.revealSpeeds[value].label}</strong>
+            <small>{s.settings.revealSpeeds[value].description}</small>
           </button>
         {/each}
       </div>
@@ -1150,7 +1184,8 @@
     gap: 8px;
   }
 
-  .preference-grid.density-grid {
+  .preference-grid.density-grid,
+  .preference-grid.reveal-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

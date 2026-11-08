@@ -282,6 +282,8 @@ export type ReviewInput = {
   userName: string;
   extraParameters?: Record<string, unknown>;
   pack?: PromptPack;
+  /** Ce que chacun voulait en secret, déjà mis en forme. */
+  objectives?: string | null;
 };
 
 /**
@@ -324,6 +326,7 @@ export async function writeReview(input: ReviewInput): Promise<SceneReview | nul
               summary: input.summary?.trim() || null,
               roster,
               transcript,
+              objectives: input.objectives ?? null,
             }),
           },
         ],

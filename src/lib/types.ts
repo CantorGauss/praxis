@@ -106,6 +106,8 @@ export type Conversation = {
   summaryThroughMessageId: string | null;
   /** Mémoire de scène : registre de faits et état courant. */
   memory: SceneMemory | null;
+  /** Ce que chaque personnage veut dans cette scène ; vide tant que rien n'est écrit. */
+  objectives: SceneObjective[];
   createdAt: string;
   updatedAt: string;
   lastInteractionAt: string | null;
@@ -153,6 +155,21 @@ export type SceneMemory = {
   threads: string[];
   /** Prochain numéro d'identifiant de fait. */
   nextFactNumber: number;
+};
+
+/**
+ * Ce qu'un personnage veut obtenir dans la scène, et ce qu'il cache. Connu de
+ * lui seul : c'est ce qui le fait agir quand personne ne mène la scène.
+ */
+export type SceneObjective = {
+  personaId: string;
+  /** Vide = l'utilisateur a choisi qu'il n'en ait pas. */
+  goal: string;
+  secret: string | null;
+  /** `user` : écrit ou corrigé à la main ; plus jamais réécrit automatiquement. */
+  origin: "auto" | "user";
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** Participation d'une persona à une conversation de groupe. */
@@ -358,6 +375,8 @@ export const CONNECTION_PRESETS: ConnectionPreset[] = [
 /** Préférences purement visuelles, sans effet sur les personnages ou les prompts. */
 export type InterfaceTheme = "system" | "dark" | "light";
 export type ChatTextSize = "small" | "normal" | "large";
+/** Vitesse d'affichage des répliques, réglée sur la lecture. */
+export type RevealSpeed = "slow" | "normal" | "fast" | "instant";
 export type InterfaceDensity = "compact" | "comfortable";
 
 export type AppSettings = {
@@ -379,6 +398,12 @@ export type AppSettings = {
   interfaceTheme: InterfaceTheme;
   /** Taille des répliques et de la zone de saisie. */
   chatTextSize: ChatTextSize;
+  /**
+   * Les répliques s'affichent au rythme de la lecture, et le personnage
+   * suivant attend qu'on ait fini : un modèle rapide ne fait plus défiler la
+   * scène plus vite qu'on ne la lit.
+   */
+  revealSpeed: RevealSpeed;
   /** Espacement vertical du fil et des bulles. */
   interfaceDensity: InterfaceDensity;
   defaultPersonaId: string | null;
@@ -408,6 +433,11 @@ export type AppSettings = {
    */
   sceneTwists: boolean;
   /**
+   * Objectifs secrets : au début d'une scène à plusieurs, le modèle donne à
+   * chaque personnage un but contrarié par celui d'un autre.
+   */
+  sceneObjectives: boolean;
+  /**
    * Effets de scène purement visuels : confettis à l'unanimité, scène qui
    * tremble quand on crie, rires qui s'envolent. Sans effet sur les prompts.
    */
@@ -430,6 +460,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   avatarsEnabled: true,
   interfaceTheme: "system",
   chatTextSize: "normal",
+  revealSpeed: "normal",
   interfaceDensity: "comfortable",
   defaultPersonaId: null,
   onboarded: false,
@@ -439,6 +470,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sceneAutoRounds: 1,
   idleChatterSeconds: 30,
   sceneTwists: true,
+  sceneObjectives: true,
   sceneEffects: true,
   historyWindowMessages: 30,
 };

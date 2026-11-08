@@ -6,6 +6,7 @@ import * as director from "../../services/director";
 import * as summaries from "../../services/memoryService";
 import * as coordination from "../../services/coordination";
 import * as emotionAnalysis from "../../services/emotionAnalysis";
+import * as objectives from "../../services/objectives";
 import type { MessageInteraction } from "../../types";
 import { conversationRepo, emotionRepo, messageRepo, participantRepo, presenceRepo, profileRepo } from "../../services/repositories";
 import { MAX_CONSECUTIVE_AI_TURNS } from "../../services/scene";
@@ -13,7 +14,7 @@ import { MAX_CONSECUTIVE_AI_TURNS } from "../../services/scene";
 const NOW = "2026-09-19T12:00:00.000Z";
 const conversation: Conversation = {
   id: "scene", personaId: "anna", title: "Au café", sceneDescription: "Un café tranquille.",
-  summary: null, summaryThroughMessageId: null, memory: null, createdAt: NOW, updatedAt: NOW,
+  summary: null, summaryThroughMessageId: null, memory: null, objectives: [], createdAt: NOW, updatedAt: NOW,
   lastInteractionAt: null,
 };
 const personas: Persona[] = ["Anna", "Marc"].map((name) => ({
@@ -40,6 +41,8 @@ beforeEach(() => {
   app.settings = {
     ...DEFAULT_SETTINGS, emotionEnabled: false, sceneDirector: "round",
     sceneAutoRounds: 0, idleChatterSeconds: 0, conversationLanguage: "fr",
+    // Le rythme de lecture a ses propres tests ; ici on suit l'enchaînement.
+    revealSpeed: "instant",
   };
   app.personas = personas;
   app.conversations = [conversation];
@@ -92,6 +95,24 @@ const speechAct = (patch: Partial<MessageInteraction> = {}): MessageInteraction 
 });
 
 describe("coordination de la scène", () => {
+  it("attend que la réplique soit lue avant de donner la parole au suivant", async () => {
+    app.settings.revealSpeed = "normal";
+    const sending = app.sendMessage("Bonsoir à tous.");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(speakerIds).toEqual(["anna"]);
+    expect(app.messages.at(-1)?.status).toBe("streaming");
+    expect(app.messages.at(-1)?.content.length).toBeLessThan(
+      "Une nouvelle réplique pour les autres.".length,
+    );
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(speakerIds).toEqual(["anna", "marc"]);
+    // « Tout afficher » libère aussitôt la scène.
+    app.skipReveal();
+    await vi.advanceTimersByTimeAsync(0);
+    await sending;
+    expect(app.messages.filter((m) => m.role === "assistant").every((m) => m.status === "complete")).toBe(true);
+  });
+
   it("consulte le directeur après chaque réplique, y compris après l'utilisateur", async () => {
     app.settings.sceneDirector = "model";
     app.personas = [...personas, { ...personas[0], id: "gwen", name: "Gwen" }];
@@ -505,5 +526,44 @@ describe("mode Se taire", () => {
     expect(speakerIds).toHaveLength(personas.length * MAX_CONSECUTIVE_AI_TURNS);
     expect(app.canContinueScene).toBe(false);
     expect(app.userSilent).toBe(false);
+  });
+});
+
+describe("objectifs secrets", () => {
+  it("les écrit une fois avant la première réplique et les donne à chacun en privé", async () => {
+    app.settings.sceneAutoRounds = 1;
+    app.conversations = [{ ...conversation, objectives: [] }];
+    const invent = vi.spyOn(objectives, "inventObjectives").mockResolvedValue([
+      { personaId: "anna", goal: "obtenir les clés de Marc", secret: "Anna a perdu le double." },
+      { personaId: "marc", goal: "garder les clés", secret: null },
+    ]);
+    const store = vi.spyOn(conversationRepo, "setObjectives").mockResolvedValue();
+    await app.sendMessage("Bonsoir.");
+    expect(invent).toHaveBeenCalledTimes(1);
+    expect(invent.mock.calls[0][0].forIds).toEqual(["anna", "marc"]);
+    expect(store).toHaveBeenCalledTimes(1);
+    const bodies = vi.mocked(llm.streamChat).mock.calls.map(([, , body]) => JSON.stringify(body));
+    const annaBody = bodies[speakerIds.indexOf("anna")];
+    const marcBody = bodies[speakerIds.indexOf("marc")];
+    expect(annaBody).toContain("obtenir les clés de Marc");
+    expect(annaBody).toContain("Anna a perdu le double.");
+    expect(marcBody).toContain("garder les clés");
+    expect(marcBody).not.toContain("Anna a perdu le double.");
+  });
+
+  it("ne relance pas l'auteur à chaque réplique après un échec", async () => {
+    app.settings.sceneAutoRounds = 2;
+    app.conversations = [{ ...conversation, objectives: [] }];
+    const invent = vi.spyOn(objectives, "inventObjectives").mockResolvedValue([]);
+    await app.sendMessage("Bonsoir.");
+    expect(invent).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne s'en mêle pas quand le réglage est coupé", async () => {
+    app.settings.sceneObjectives = false;
+    app.conversations = [{ ...conversation, objectives: [] }];
+    const invent = vi.spyOn(objectives, "inventObjectives").mockResolvedValue([]);
+    await app.sendMessage("Bonsoir.");
+    expect(invent).not.toHaveBeenCalled();
   });
 });

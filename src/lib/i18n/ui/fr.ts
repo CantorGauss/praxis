@@ -89,6 +89,9 @@ export const frUi: UiStrings = {
     userNameHint:
       "Ce nom désigne vos messages, en particulier dans les conversations réunissant plusieurs personnages.",
     continue: "Continuer",
+    skipConnection: "Configurer la connexion plus tard",
+    skipConnectionHint:
+      "Pour passer par une passerelle distante comme OpenRouter, créez votre personnage maintenant, puis ajoutez la connexion dans les Réglages.",
   },
 
   cast: {
@@ -123,6 +126,21 @@ export const frUi: UiStrings = {
     makeEnter: (name: string) => `Faire entrer ${name}`,
     enter: "Entrer",
     allPresent: "Tous vos personnages sont présents.",
+    objectives: "Objectifs secrets",
+    objectivesHidden:
+      "Chacun veut quelque chose et ne le dira pas. Devinez, ou jetez un œil.",
+    objectivesNone: "Pas encore d'objectifs : ils seront écrits avant la prochaine réplique.",
+    objectivesOff: "Les objectifs secrets sont désactivés dans les Réglages.",
+    reveal: "Jeter un œil",
+    hide: "Masquer",
+    redistribute: "Redistribuer",
+    goalLabel: "Veut",
+    secretLabel: "Cache",
+    noGoal: "Aucun objectif",
+    editedByYou: "modifié par vous",
+    goalPlaceholder: "obtenir de Marc qu'il avoue avoir vendu la maison",
+    secretPlaceholder: "Facultatif",
+    goalHint: "Laissez l'objectif vide pour que ce personnage n'en ait aucun.",
     describeArrival: "Décrivez son arrivée",
     describeDeparture: "Décrivez son départ",
     narrationHint:
@@ -273,6 +291,8 @@ export const frUi: UiStrings = {
     welcomeEmpty: "Créez d'abord un personnage dans la page Personnages.",
     everyone: "tout le monde",
     interrupted: "Réponse interrompue",
+    showWholeLine: "Tout afficher ⏭",
+    showWholeLineHint: "Afficher tout de suite la fin de la réplique",
     regenerate: "Régénérer",
     idleCountdown: (seconds: number) =>
       `Sans réponse de votre part, la conversation reprend dans ${seconds} s.`,
@@ -281,6 +301,7 @@ export const frUi: UiStrings = {
     scenePaused: "Scène en pause : les personnages n'enchaînent plus tout seuls.",
     resume: "Reprendre",
     whoSpeaks: "Qui prend la parole…",
+    writingObjectives: "L'auteur distribue les objectifs secrets…",
     isAnswering: (name: string) => `${name} répond…`,
     thenSpeakers: (names: string) => `ensuite : ${names}`,
     sceneContinuesBelow: "La scène continue plus bas",
@@ -618,6 +639,13 @@ export const frUi: UiStrings = {
       "didascalie qui relance la scène : une nouvelle qui tombe, un incident, " +
       "un geste inattendu. Cela coûte une courte requête de plus, au plus une " +
       `fois toutes les ${lines} répliques.`,
+    sceneObjectives: "Objectifs secrets",
+    sceneObjectivesHint:
+      "Au début d'une scène à plusieurs, ou quand quelqu'un entre, le modèle " +
+      "donne à chacun un but qui contrarie celui d'un autre, parfois avec un " +
+      "secret. Ils le poursuivent même quand vous vous taisez. Cela coûte une " +
+      "requête de plus par distribution ; les objectifs se lisent et se " +
+      "modifient dans le panneau de la distribution.",
     characterBehaviour: "Comportement des personnages",
     defaultPersona: "Personnage proposé au démarrage d'une conversation",
     noneOption: "— Aucun —",
@@ -644,6 +672,15 @@ export const frUi: UiStrings = {
       small: { label: "Petite", description: "Plus de texte à l’écran" },
       normal: { label: "Normale", description: "Lecture équilibrée" },
       large: { label: "Grande", description: "Lecture plus confortable" },
+    },
+    revealSpeed: "Vitesse des répliques",
+    revealSpeedHint:
+      "Les répliques s’affichent au rythme de la lecture, et le personnage suivant attend que vous ayez lu.",
+    revealSpeeds: {
+      slow: { label: "Lente", description: "Le temps de tout savourer" },
+      normal: { label: "Normale", description: "Un rythme de lecture posé" },
+      fast: { label: "Rapide", description: "Pour lire en diagonale" },
+      instant: { label: "Instantanée", description: "Aussi vite que le modèle écrit" },
     },
     threadSpacing: "Espacement du fil",
     threadSpacingHint:
@@ -702,6 +739,7 @@ export const frUi: UiStrings = {
     narrationSpeaker: "Scène",
     generatedTwist: "Imprévu écrit par le modèle pour relancer la scène",
     twistWillHappen: "L'imprévu arrivera dès la fin de la réplique en cours.",
+    objectivesFailed: "Le modèle n'a pas rendu d'objectifs utilisables. Réessayez, ou écrivez-les vous-même.",
     twistFailed: "Le metteur en scène n'a rien trouvé cette fois. Relancez le dé !",
     personaWillEnter: (name: string) =>
       `${name} entrera dès la fin du tour en cours.`,

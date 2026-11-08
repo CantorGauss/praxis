@@ -25,6 +25,7 @@ import { DEFAULT_MAX_OUTPUT_TOKENS } from "./inference";
 import { decodeInteraction } from "./coordination";
 import type { PresenceSpan } from "./presence";
 import { decodeMemory } from "./memory";
+import { decodeObjectives, encodeObjectives } from "./objectives";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -106,6 +107,11 @@ export const settingsRepo = {
         ["small", "normal", "large"] as const,
         DEFAULT_SETTINGS.chatTextSize,
       ),
+      revealSpeed: oneOf(
+        "revealSpeed",
+        ["slow", "normal", "fast", "instant"] as const,
+        DEFAULT_SETTINGS.revealSpeed,
+      ),
       interfaceDensity: oneOf(
         "interfaceDensity",
         ["compact", "comfortable"] as const,
@@ -124,6 +130,7 @@ export const settingsRepo = {
       ),
       sceneTwists: parse("sceneTwists", DEFAULT_SETTINGS.sceneTwists),
       sceneEffects: parse("sceneEffects", DEFAULT_SETTINGS.sceneEffects),
+      sceneObjectives: parse("sceneObjectives", DEFAULT_SETTINGS.sceneObjectives),
       historyWindowMessages,
     };
   },
@@ -563,6 +570,7 @@ type ConversationRow = {
   summary: string | null;
   summary_through_message_id: string | null;
   memory?: string | null;
+  objectives?: string | null;
   created_at: string;
   updated_at: string;
   last_interaction_at: string | null;
@@ -577,6 +585,7 @@ function conversationFromRow(r: ConversationRow): Conversation {
     summary: r.summary,
     summaryThroughMessageId: r.summary_through_message_id,
     memory: decodeMemory(r.memory ?? null),
+    objectives: decodeObjectives(r.objectives ?? null),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     lastInteractionAt: r.last_interaction_at,
@@ -624,6 +633,7 @@ export const conversationRepo = {
       summary: null,
       summaryThroughMessageId: null,
       memory: null,
+      objectives: [],
       createdAt: now,
       updatedAt: now,
       lastInteractionAt: null,
@@ -650,6 +660,19 @@ export const conversationRepo = {
         encodeMemory(conversation.memory),
       ],
     );
+  },
+
+  /**
+   * Les objectifs ont leur propre écriture : `update` part souvent d'une copie
+   * prise avant un appel au modèle (mémoire, titre), qui écraserait sinon un
+   * objectif écrit ou corrigé entre-temps.
+   */
+  async setObjectives(id: string, objectives: Conversation["objectives"]): Promise<void> {
+    const db = await getDb();
+    await db.execute("UPDATE conversations SET objectives = $2 WHERE id = $1", [
+      id,
+      encodeObjectives(objectives),
+    ]);
   },
 
   async touch(id: string): Promise<string> {
@@ -1285,7 +1308,7 @@ const EXPORT_TABLES = [
   "messages",
 ] as const;
 
-export const EXPORT_SCHEMA_VERSION = 8;
+export const EXPORT_SCHEMA_VERSION = 9;
 
 export async function exportAllData(): Promise<string> {
   const db = await getDb();

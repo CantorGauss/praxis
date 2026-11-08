@@ -164,7 +164,7 @@
   }
 </script>
 
-<main class="messages" bind:this={listEl} onscroll={onListScroll}>
+<main class="messages" data-stage bind:this={listEl} onscroll={onListScroll}>
     {#if app.currentConversation?.sceneDescription}
       <div class="situation">
         <span class="situation-label"><span aria-hidden="true">🎬</span> {s.chat.startingSituation}</span>
@@ -200,6 +200,7 @@
     {#each app.messages as m (m.id)}
       {#if m.kind === "narration"}
         <div
+          id={`message-${m.id}`}
           class="narration"
           class:generated={m.role === "assistant"}
           class:fresh={isFresh(m)}
@@ -285,6 +286,11 @@
                       class="rp-action">{seg.text}</span>{:else if seg.kind === "aside"}<span
                       class="rp-aside" title={s.chat.asideHint}><span class="aside-tag"
                         aria-hidden="true">🤫 {s.chat.aside}</span>{seg.text}</span>{:else}{seg.text}{/if}{/each}{#if m.status === "streaming" && m.content}<span class="cursor">▍</span>{/if}
+                {#if m.status === "streaming" && m.content && app.settings.revealSpeed !== "instant"}
+                  <button class="reveal-skip" onclick={() => app.skipReveal()} title={s.chat.showWholeLineHint}>
+                    {s.chat.showWholeLine}
+                  </button>
+                {/if}
                 {#if m.status === "cancelled"}
                   <div class="status-label">{s.chat.interrupted}</div>
                 {/if}
@@ -316,6 +322,10 @@
         {s.chat.scenePaused}
         <button onclick={() => app.toggleIdlePause()}>{s.chat.resume}</button>
       </div>
+    {/if}
+
+    {#if app.plotting}
+      <div class="turn-status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{s.chat.writingObjectives}</div>
     {/if}
 
     {#if app.directing}
@@ -728,6 +738,24 @@
   .cursor {
     animation: blink 1s step-end infinite;
     color: var(--accent);
+  }
+
+  /* Discret : on lit la réplique, on ne la survole pas. */
+  .reveal-skip {
+    display: block;
+    margin-top: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  .reveal-skip:hover {
+    color: var(--accent);
+    opacity: 1;
   }
 
   @keyframes blink {

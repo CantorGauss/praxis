@@ -62,6 +62,7 @@ const conversation: Conversation = {
   summary: null,
   summaryThroughMessageId: null,
   memory: null,
+  objectives: [],
   createdAt: "",
   updatedAt: "",
   lastInteractionAt: null,

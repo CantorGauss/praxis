@@ -222,6 +222,27 @@ export const frPrompts: PromptPack = {
       `Ce cadre est connu de tous les personnages présents. Tiens-le pour ` +
       `acquis sans le réciter, et n'en contredis pas les éléments.`,
 
+    objective: (goal, secret) =>
+      `[CE QUE TU VEUX DANS CETTE SCÈNE]\n` +
+      `Ton objectif : ${goal}\n` +
+      (secret ? `Ce que tu caches : ${secret}\n` : "") +
+      `Toi seul le sais : les autres ont leurs propres buts, qui contrarient ` +
+      `peut-être le tien. Poursuis-le activement, réplique après réplique, à la ` +
+      `manière de ton personnage : avance tes pions, questionne, insiste, ` +
+      `négocie, détourne, bluffe ou cède sur un détail pour gagner l'essentiel. ` +
+      `Ne l'annonce jamais tel quel et ne le récite pas.` +
+      (secret
+        ? ` Ne livre ton secret que si la scène t'y accule, ou si le dire sert ` +
+          `enfin ton objectif.`
+        : "") +
+      ` Si la scène change la donne, ton but peut évoluer, mais tu ne ` +
+      `l'abandonnes pas sans raison.`,
+
+    objectiveReminder: (goal) =>
+      `[TON BUT]\n${goal}\n` +
+      `Cette réplique doit t'en rapprocher, même d'un petit pas, ou empêcher ` +
+      `quelqu'un de t'en éloigner. Ne le dis pas tel quel.`,
+
     identityReminder: (personaName, description) =>
       `[QUI TU ES, ${personaName.toUpperCase()}]\n${description}\n` +
       `Cette fiche fait foi sur ton passé et tes liens. Si l'une de tes ` +
@@ -394,7 +415,7 @@ export const frPrompts: PromptPack = {
   },
 
   director: {
-    system: ({ userName, afterUserMessage }) =>
+    system: ({ userName, afterUserMessage, hasObjectives, listening }) =>
       "Tu es le metteur en scène d'une conversation. Tu ne joues aucun " +
       "personnage et tu n'écris aucune réplique : tu décides seulement " +
       "qui prend la parole maintenant.\n" +
@@ -410,11 +431,22 @@ export const frPrompts: PromptPack = {
       "Tiens compte des intentions et des propositions en cours, sans obliger chacun à parler. " +
       (afterUserMessage
         ? `${userName} vient de parler : au moins un personnage doit répondre.`
-        : `${userName} s'est tu : le tableau peut être vide si la scène retombe naturellement.`),
+        : hasObjectives && listening
+          ? `${userName} écoute : la scène continue sans lui. Chaque personnage a un but ` +
+            `qui lui est propre (indiqué après « veut : »). Fais parler celui qui a le plus ` +
+            `intérêt à agir maintenant : celui dont le but vient d'être contrarié, ou qui ` +
+            `peut en profiter pour avancer le sien. Ne rends pas de tableau vide.`
+          : hasObjectives
+            ? `Chaque personnage a un but qui lui est propre (indiqué après « veut : »). ` +
+              `Ne fais parler quelqu'un que si la dernière réplique touche vraiment son but ` +
+              `et qu'il ne peut pas la laisser passer. Sinon, rends [] : ${userName} reprend la main.`
+            : `${userName} s'est tu : le tableau peut être vide si la scène retombe naturellement.`),
     user: ({ roster, transcript }) =>
       `Personnages présents :\n${roster}\n\n` +
       `Dernières répliques :\n${transcript}\n\n` +
       "Qui parle maintenant ?",
+    rosterLine: (name, description, goal) =>
+      `- ${name}` + (description ? ` : ${description}` : "") + (goal ? ` — veut : ${goal}` : ""),
     transcriptLine: (name, content) => `${name} : ${content}`,
     narrationLine: (content) => `(Scène : ${content})`,
     emptyTranscript: "(la scène commence)",
@@ -453,10 +485,14 @@ export const frPrompts: PromptPack = {
       "Réponds sur deux lignes, sans guillemets ni commentaire :\n" +
       "Enjeu : ce qui compte le plus en ce moment dans la scène, avec ses noms propres\n" +
       "Didascalie : l'imprévu qui fait basculer cet enjeu précis",
-    user: ({ situation, summary, roster, transcript, theme, previousTwists }) =>
+    user: ({ situation, summary, roster, transcript, theme, previousTwists, objectives }) =>
       (situation ? `Situation de départ :\n${situation}\n\n` : "") +
       (summary ? `Ce qui s'est passé jusqu'ici :\n${summary}\n\n` : "") +
       `Personnages présents :\n${roster}\n\n` +
+      (objectives
+        ? `Ce que chacun cherche en secret (pour toi seul, ne le révèle pas tel quel) :\n` +
+          `${objectives}\nUn bon imprévu rapproche l'un de son but, ou le lui rend plus difficile.\n\n`
+        : "") +
       `Dernières répliques :\n${transcript}\n\n` +
       (previousTwists?.length
         ? `Didascalies déjà jouées, à ne pas imiter :\n` +
@@ -510,12 +546,60 @@ export const frPrompts: PromptPack = {
       "- la critique tient en trois à cinq phrases, au présent, pleines d'esprit.\n" +
       "Réponds UNIQUEMENT en JSON, sans commentaire : " +
       '{"newspaper":"…","headline":"…","stars":3,"review":"…"}',
-    user: ({ situation, summary, roster, transcript }) =>
+    user: ({ situation, summary, roster, transcript, objectives }) =>
       (situation ? `Situation de départ :\n${situation}\n\n` : "") +
       (summary ? `Début de la pièce, en résumé :\n${summary}\n\n` : "") +
       `Distribution :\n${roster}\n\n` +
+      (objectives
+        ? `Ce que chacun voulait en secret (le programme te l'a confié) :\n${objectives}\n` +
+          `Dis qui a obtenu ce qu'il voulait, qui s'est fait doubler, quel secret a éclaté.\n\n`
+        : "") +
       `La pièce :\n${transcript}\n\n` +
       "Rideau. Écris ta critique.",
+  },
+
+  objectives: {
+    system: ({ userName }) =>
+      "Tu es l'auteur d'une pièce improvisée. Avant que la scène ne se joue, tu " +
+      "donnes à certains personnages un objectif : ce qu'ils veulent obtenir ici " +
+      "et maintenant, et de qui. C'est ce qui fera avancer la scène quand " +
+      "personne ne la mène.\n" +
+      "Règles :\n" +
+      "- un objectif concret, qu'on peut atteindre ou rater pendant la scène : " +
+      "obtenir un aveu, une promesse, un accord, une faveur, de l'argent, un " +
+      "départ, un pardon ; cacher quelque chose ; faire changer quelqu'un d'avis. " +
+      "Jamais un état d'âme (« être heureux ») ni un vœu vague (« mieux se " +
+      "connaître ») ;\n" +
+      `- il vise une personne présente, nommée : un autre personnage ou ${userName} ;\n` +
+      "- les objectifs se contrarient : chacun en gêne au moins un autre, sans que " +
+      "tout le monde se dispute la même chose ;\n" +
+      "- il découle de la fiche du personnage, de la situation et de ce qui s'est " +
+      "déjà dit, sans rien en contredire ;\n" +
+      "- ajoute un secret si cela sert l'objectif : ce que le personnage sait ou a " +
+      "fait et ne veut pas dire, et qui pourrait éclater pendant la scène. Sinon, " +
+      "laisse-le vide ;\n" +
+      `- n'invente aucun nom de personne ; ${userName} n'a pas d'objectif ;\n` +
+      "- l'objectif s'écrit à l'infinitif, sans le nom du personnage (« obtenir " +
+      "de Marc qu'il… ») ; le secret, en une phrase au présent ou au passé ;\n" +
+      "- 25 mots au plus par champ.\n" +
+      "Réponds UNIQUEMENT par un tableau JSON, sans commentaire :\n" +
+      '[{"name":"…","goal":"…","secret":"…"}]',
+    user: ({ situation, summary, roster, assigned, transcript, names }) =>
+      (situation ? `Situation de départ :\n${situation}\n\n` : "") +
+      (summary ? `Ce qui s'est passé jusqu'ici :\n${summary}\n\n` : "") +
+      `Personnages présents :\n${roster}\n\n` +
+      (assigned
+        ? `Objectifs déjà donnés, à garder tels quels et à contrarier :\n${assigned}\n\n`
+        : "") +
+      (transcript ? `Dernières répliques :\n${transcript}\n\n` : "") +
+      `Donne un objectif à : ${enumerate(names)}.`,
+    rosterLine: (name, description, privatePrompt) =>
+      `- ${name}` +
+      (description ? ` : ${description}` : "") +
+      (privatePrompt ? `\n  (caractère : ${privatePrompt.replace(/\s+/g, " ")})` : ""),
+    assignedLine: (name, goal) => `- ${name} veut : ${goal}`,
+    goalLine: (name, goal, secret) =>
+      `- ${name} veut : ${goal}` + (secret ? ` (cache : ${secret})` : ""),
   },
 
   coordination: {

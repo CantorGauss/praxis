@@ -10,6 +10,7 @@ import type {
   MemoryCategory,
   MessageReaction,
   Persona,
+  SceneObjective,
 } from "../types";
 import { DEFAULT_SETTINGS, USER_ADDRESSEE } from "../types";
 import {
@@ -78,6 +79,13 @@ import { setUiLocale, t } from "../i18n/ui.svelte";
 import { chooseSpeakers } from "../services/director";
 import { detectStagnation, linesSinceNarration } from "../services/stagnation";
 import { inventSceneTwist, TWIST_COOLDOWN_LINES } from "../services/twist";
+import {
+  activeObjective,
+  inventObjectives,
+  MAX_OBJECTIVE_CHARS,
+  mergeObjectives,
+  missingObjectives,
+} from "../services/objectives";
 import type { TwistTheme } from "../i18n/prompts";
 import {
   MIN_LINES_FOR_REVIEW,
@@ -92,7 +100,7 @@ import {
   resolveContextBudget,
   type ContextBudget,
 } from "../services/inference";
-import { createFrameBatcher } from "../services/frameBatcher";
+import { createRevealer, REVEAL_CHARS_PER_SECOND, type Revealer } from "../services/reveal";
 import { countAsides, publicText } from "../services/messageFormat";
 import { analyzeInteraction, collectProposals, coordinationContext } from "../services/coordination";
 
@@ -156,6 +164,8 @@ class AppState {
   streamingPersonaId = $state<string | null>(null);
   pendingSpeakerIds = $state<string[]>([]);
   private streamRequestId: string | null = null;
+  /** Réplique en cours d'affichage, que l'utilisateur peut faire apparaître d'un coup. */
+  private activeReveal: Revealer | null = null;
   private turnAborted = false;
   private sceneSettled = false;
   private interactionAttempts = new Set<string>();
@@ -189,6 +199,13 @@ class AppState {
 
   /** Vrai pendant que le metteur en scène choisit qui parle. */
   directing = $state(false);
+  /** L'auteur écrit les objectifs secrets des personnages. */
+  plotting = $state(false);
+  /**
+   * Dernière demande d'objectifs restée sans réponse utilisable, par
+   * conversation : on ne la relance pas à chaque réplique pour la même distribution.
+   */
+  private objectiveAttempts = new Map<string, string>();
 
   /** Taille estimée du dernier prompt envoyé, pour diagnostiquer la lenteur. */
   lastPromptTokens = $state<number | null>(null);
@@ -683,6 +700,7 @@ class AppState {
   closeConversation(): void {
     if (this.userSilent) this.reclaimFloor();
     this.turnAborted = true;
+    this.skipReveal();
     this.cancelIdleChatter();
     this.queuedMessage = null;
     this.pendingSceneActions = [];
@@ -690,6 +708,8 @@ class AppState {
     this.curtainPausedScene = false;
     this.currentConversationId = null;
     this.interactionAttempts.clear();
+    // Rouvrir la scène redonne une chance à l'auteur.
+    this.objectiveAttempts.clear();
     this.messages = [];
     this.participantIds = [];
     this.presenceSpans = [];
@@ -1316,6 +1336,7 @@ class AppState {
       userName: this.userName,
       extraParameters: profile.customParameters,
       pack: this.pack,
+      objectives: this.objectivesDigest(conv, castIds),
     });
     settle(review ? "ready" : "failed", review ?? previous);
   }
@@ -1416,10 +1437,12 @@ class AppState {
         descriptions: Object.fromEntries(
           this.participants.map((p) => [p.id, p.description]),
         ),
+        goals: this.goalsById(),
         recentMessages: this.messages,
         label: this.labelFor,
         userName: this.userName,
         afterUserMessage: options.afterUserMessage,
+        listening: this.userSilent,
         coordination: this.coordination,
         pack: this.pack,
       });
@@ -1529,6 +1552,7 @@ class AppState {
         extraParameters: profile.customParameters,
         pack: this.pack,
         theme,
+        objectives: this.objectivesDigest(conv, this.participants.map((p) => p.id)),
       });
     } finally {
       this.directing = false;
@@ -1668,6 +1692,10 @@ class AppState {
     fixedSpeakers = false,
   ): Promise<boolean> {
     await this.recordLastInteraction(conversationId);
+    // Avant la première réplique d'une scène, ou à l'arrivée d'un personnage :
+    // chacun reçoit ce qu'il veut, pour avoir une raison d'agir.
+    await this.ensureObjectives(conversationId);
+    if (this.turnAborted || this.currentConversationId !== conversationId) return false;
     // The list gives a reply budget, not a predetermined speaking order.
     for (let step = 0; step < speakerIds.length; step++) {
       if (this.turnAborted || this.currentConversationId !== conversationId) return false;
@@ -1991,6 +2019,9 @@ class AppState {
       recentMessages: recent,
       missedEarlier: knowledge.missedSome,
       sceneDescription: conv.sceneDescription,
+      objective: this.objectivesInPlay
+        ? activeObjective(this.conversationById(conv.id)?.objectives ?? conv.objectives, speaker.id)
+        : null,
       contextTokens,
       reserveOutputTokens: replyTokenBudget,
       scene,
@@ -2053,21 +2084,25 @@ class AppState {
     const completed = await new Promise<boolean>((resolve) => {
       let settled = false;
       let rawContent = "";
-      const publishStreamingContent = () => {
-        this.streamingContent = rawContent;
+      // Le texte reçu est montré au rythme de la lecture : la scène ne va
+      // jamais plus vite que celui qui la lit.
+      const revealer = createRevealer((visible) => {
+        this.streamingContent = visible;
         this.messages = this.messages.map((message) =>
           message.id === assistantMessage.id
-            ? { ...message, content: rawContent }
+            ? { ...message, content: visible }
             : message,
         );
-      };
-      const streamUpdates = createFrameBatcher(publishStreamingContent);
+      }, REVEAL_CHARS_PER_SECOND[this.settings.revealSpeed]);
+      this.activeReveal = revealer;
       const finalize = async (status: "complete" | "cancelled" | "error") => {
         if (settled) return;
         settled = true;
-        // Une fin SSE peut arriver avant la prochaine frame : la dernière rafale
-        // doit être visible et persistée avant de clore le message.
-        streamUpdates.flush();
+        // Une fin de flux, une annulation ou une erreur montre tout ce qui a
+        // été reçu avant de clore le message.
+        revealer.skip();
+        revealer.stop();
+        if (this.activeReveal === revealer) this.activeReveal = null;
         const raw = rawContent;
         const content = scene
           ? cleanSpeakerReply(
@@ -2119,9 +2154,10 @@ class AppState {
       streamChat(target, requestId, body, {
         onDelta: (delta) => {
           rawContent += delta;
-          streamUpdates.schedule();
+          revealer.update(rawContent);
         },
-        onDone: () => void finalize("complete"),
+        // Le flux est fini, pas la lecture : le tour attend que tout soit affiché.
+        onDone: () => void revealer.drain().then(() => finalize("complete")),
         onCancelled: () => void finalize("cancelled"),
         onError: (message) => {
           this.errorBanner = message;
@@ -2158,8 +2194,14 @@ class AppState {
     return Math.max(0, pending - KEEP_RECENT_MESSAGES);
   }
 
+  /**
+   * Les objectifs n'en font pas partie : la copie remise ici a souvent été
+   * prise avant un appel au modèle. Ils ne changent que par `storeObjectives`.
+   */
   private replaceConversation(updated: Conversation): void {
-    this.conversations = this.conversations.map((c) => (c.id === updated.id ? updated : c));
+    this.conversations = this.conversations.map((c) =>
+      c.id === updated.id ? { ...updated, objectives: c.objectives } : c,
+    );
   }
 
   /**
@@ -2350,15 +2392,149 @@ class AppState {
     await this.saveMemory((memory) => (memory ? removeFact(memory, id) : memory));
   }
 
+  // -------------------------------------------------------------------------
+  // Objectifs de scène
+  // -------------------------------------------------------------------------
+
+  /** Les objectifs ne jouent qu'à plusieurs : seul, le personnage suit l'utilisateur. */
+  get objectivesInPlay(): boolean {
+    return this.settings.sceneObjectives && this.participants.length > 1;
+  }
+
+  /** But de chaque personnage présent, pour le metteur en scène. */
+  private goalsById(): Record<string, string | null> | undefined {
+    const conv = this.currentConversation;
+    if (!conv || !this.objectivesInPlay) return undefined;
+    return Object.fromEntries(
+      this.participants.map((p) => [p.id, activeObjective(conv.objectives, p.id)?.goal ?? null]),
+    );
+  }
+
+  /** « Anna veut : … (cache : …) », une ligne par personnage, ou null. */
+  private objectivesDigest(conv: Conversation, personaIds: string[]): string | null {
+    if (!this.settings.sceneObjectives) return null;
+    const lines = personaIds.flatMap((id) => {
+      const objective = activeObjective(conv.objectives, id);
+      const name = this.personaById(id)?.name;
+      return objective && name
+        ? [this.pack.objectives.goalLine(name, objective.goal, objective.secret)]
+        : [];
+    });
+    return lines.length ? lines.join("\n") : null;
+  }
+
+  private async storeObjectives(conversationId: string, objectives: SceneObjective[]): Promise<void> {
+    await conversationRepo.setObjectives(conversationId, objectives);
+    this.conversations = this.conversations.map((c) =>
+      c.id === conversationId ? { ...c, objectives } : c,
+    );
+  }
+
+  /**
+   * Écrit les objectifs des personnages présents qui n'en ont pas encore.
+   * `force` : l'utilisateur redemande tout, y compris ce qu'il avait corrigé.
+   * Retourne false si le modèle n'a rien donné d'utilisable.
+   */
+  private async ensureObjectives(conversationId: string, force = false): Promise<boolean> {
+    if (!this.objectivesInPlay || this.currentConversationId !== conversationId) return true;
+    const conv = this.conversationById(conversationId);
+    const target = this.target;
+    const modelId = this.activeModelId;
+    if (!conv || !target || !modelId) return false;
+    const presentIds = this.participants.map((p) => p.id);
+    const forIds = force ? presentIds : missingObjectives(conv.objectives, presentIds);
+    if (forIds.length === 0) return true;
+    // Même distribution, même échec : on attend qu'elle change, ou qu'on le redemande.
+    const attemptKey = [...forIds].sort().join(",");
+    if (!force && this.objectiveAttempts.get(conversationId) === attemptKey) return false;
+
+    this.plotting = true;
+    try {
+      const profile = await profileRepo.get(modelId);
+      const drafts = await inventObjectives({
+        connection: target,
+        modelId,
+        cast: this.participants,
+        forIds,
+        existing: conv.objectives,
+        sceneDescription: conv.sceneDescription,
+        summary: this.memoryDigestFor(conv),
+        recentMessages: this.messages,
+        label: this.labelFor,
+        userName: this.userName,
+        extraParameters: profile.customParameters,
+        pack: this.pack,
+      });
+      if (drafts.length === 0) {
+        this.objectiveAttempts.set(conversationId, attemptKey);
+        return false;
+      }
+      this.objectiveAttempts.delete(conversationId);
+      // Relu après l'appel : l'utilisateur a pu corriger un objectif entre-temps.
+      const latest = this.conversationById(conversationId)?.objectives ?? conv.objectives;
+      await this.storeObjectives(
+        conversationId,
+        mergeObjectives(latest, drafts, new Date().toISOString(), force),
+      );
+      return true;
+    } finally {
+      this.plotting = false;
+    }
+  }
+
+  /** Corrige l'objectif d'un personnage ; un but vide signifie « aucun ». */
+  async updateObjective(personaId: string, goal: string, secret: string): Promise<void> {
+    const conv = this.currentConversation;
+    if (!conv) return;
+    const now = new Date().toISOString();
+    const previous = conv.objectives.find((o) => o.personaId === personaId);
+    const next: SceneObjective = {
+      personaId,
+      goal: goal.trim().slice(0, MAX_OBJECTIVE_CHARS),
+      secret: secret.trim().slice(0, MAX_OBJECTIVE_CHARS) || null,
+      origin: "user",
+      createdAt: previous?.createdAt || now,
+      updatedAt: now,
+    };
+    await this.storeObjectives(conv.id, [
+      ...conv.objectives.filter((o) => o.personaId !== personaId),
+      next,
+    ]);
+  }
+
+  /** Redistribue tous les objectifs des présents, même ceux corrigés à la main. */
+  async regenerateObjectives(): Promise<void> {
+    const conv = this.currentConversation;
+    if (!conv || !this.objectivesInPlay || !this.userHasFloor) return;
+    if (!this.target) {
+      this.errorBanner = t().app.noConnection;
+      return;
+    }
+    if (!this.activeModelId) {
+      this.errorBanner = t().app.noModel;
+      return;
+    }
+    await this.withTurn(async () => {
+      const ok = await this.ensureObjectives(conv.id, true);
+      if (!ok) this.notice = t().app.objectivesFailed;
+    });
+  }
+
   /** Annule la réponse en cours et abandonne les tours restants. */
   async cancelGeneration(): Promise<void> {
     if (this.userSilent) this.reclaimFloor();
     this.cancelIdleChatter();
     this.turnAborted = true;
     this.pendingSpeakerIds = [];
+    this.skipReveal();
     if (this.streamRequestId) {
       await cancelStream(this.streamRequestId);
     }
+  }
+
+  /** Affiche d'un coup la fin de la réplique en cours. */
+  skipReveal(): void {
+    this.activeReveal?.skip();
   }
 
   async regenerate(): Promise<void> {

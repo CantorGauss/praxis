@@ -19,6 +19,7 @@ export type PromptPack = {
   director: DirectorPrompts;
   twist: TwistPrompts;
   review: ReviewPrompts;
+  objectives: ObjectivePrompts;
   coordination: {
     analysisSystem: string;
     context(data: string): string;
@@ -103,6 +104,13 @@ export type AssemblerPrompts = {
   /** Ce qui pousse chaque réplique à faire avancer la scène. */
   momentum(): string;
   startingSituation(situation: string): string;
+  /**
+   * Ce que le personnage veut dans la scène et ce qu'il cache. Stable d'un tour
+   * à l'autre : il reste dans le préfixe du prompt.
+   */
+  objective(goal: string, secret: string | null): string;
+  /** Le même but, rappelé juste avant la réplique : c'est là qu'il pèse. */
+  objectiveReminder(goal: string): string;
   /** Rappel saillant placé juste avant la réponse, près de la dernière réplique. */
   sceneReminder(situation: string): string;
   /**
@@ -160,8 +168,20 @@ export type AssemblerPrompts = {
 };
 
 export type DirectorPrompts = {
-  system(input: { userName: string; afterUserMessage: boolean }): string;
+  system(input: {
+    userName: string;
+    afterUserMessage: boolean;
+    /** Les personnages ont un but : on fait parler celui qui y gagne le plus. */
+    hasObjectives?: boolean;
+    /**
+     * L'utilisateur a choisi d'écouter : la scène ne doit pas retomber. Sinon,
+     * le silence lui rend la parole, et c'est souvent ce qu'il attend.
+     */
+    listening?: boolean;
+  }): string;
   user(input: { roster: string; transcript: string }): string;
+  /** Ligne de distribution d'un personnage qui a un but. */
+  rosterLine(name: string, description: string | null, goal: string | null): string;
   /** Ligne de transcription soumise au directeur. */
   transcriptLine(name: string, content: string): string;
   narrationLine(content: string): string;
@@ -191,6 +211,8 @@ export type TwistPrompts = {
     theme?: string | null;
     /** Didascalies déjà jouées : sans elles, le modèle ressert le même procédé. */
     previousTwists?: readonly string[];
+    /** Ce que chacun cherche en secret : l'imprévu peut le contrarier. */
+    objectives?: string | null;
   }): string;
   /** Consigne propre à chaque thème, ajoutée à la demande. */
   themes: Record<TwistTheme, string>;
@@ -210,7 +232,29 @@ export type ReviewPrompts = {
     summary: string | null;
     roster: string;
     transcript: string;
+    /** Ce que chacun voulait : le critique peut dire qui l'a obtenu. */
+    objectives?: string | null;
   }): string;
+};
+
+/** L'auteur qui donne à chaque personnage un but pour la scène. */
+export type ObjectivePrompts = {
+  system(input: { userName: string }): string;
+  user(input: {
+    situation: string | null;
+    summary: string | null;
+    roster: string;
+    /** Objectifs déjà donnés aux autres, que les nouveaux doivent contrarier. */
+    assigned: string | null;
+    transcript: string | null;
+    /** Personnages à qui donner un objectif maintenant. */
+    names: string[];
+  }): string;
+  /** Un personnage de la distribution, avec un extrait de son prompt interne. */
+  rosterLine(name: string, description: string | null, privatePrompt: string | null): string;
+  assignedLine(name: string, goal: string): string;
+  /** Une ligne « ce que chacun veut », pour l'imprévu et la critique. */
+  goalLine(name: string, goal: string, secret: string | null): string;
 };
 
 export type MemoryPrompts = {

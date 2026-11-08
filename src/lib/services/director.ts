@@ -68,11 +68,18 @@ export type DirectorInput = {
   participants: Participant[];
   /** Descriptions courtes, pour que le choix tienne compte des caractères. */
   descriptions: Record<string, string | null>;
+  /** But de chacun dans la scène : celui qui a intérêt à agir parle. */
+  goals?: Record<string, string | null>;
   recentMessages: Message[];
   label: MessageLabeller;
   userName: string;
   /** Vrai quand l'utilisateur vient de parler : quelqu'un doit répondre. */
   afterUserMessage: boolean;
+  /**
+   * L'utilisateur a choisi « Rester silencieux » : la scène doit continuer.
+   * Sinon, elle peut retomber et lui rendre la parole.
+   */
+  listening?: boolean;
   coordination?: string;
   /** Paramètres du profil de modèle (désactivation du raisonnement, etc.). */
   extraParameters?: Record<string, unknown>;
@@ -93,11 +100,11 @@ export async function chooseSpeakers(input: DirectorInput): Promise<string[] | n
   const d = pack.director;
 
   const roster = participants
-    .map((p) => {
-      const description = input.descriptions[p.id];
-      return description ? `- ${p.name} : ${description}` : `- ${p.name}`;
-    })
+    .map((p) =>
+      d.rosterLine(p.name, input.descriptions[p.id] ?? null, input.goals?.[p.id] ?? null),
+    )
     .join("\n");
+  const hasObjectives = participants.some((p) => input.goals?.[p.id]?.trim());
 
   const transcript = input.recentMessages
     .slice(-DIRECTOR_CONTEXT_MESSAGES)
@@ -126,6 +133,8 @@ export async function chooseSpeakers(input: DirectorInput): Promise<string[] | n
             content: d.system({
               userName: input.userName,
               afterUserMessage: input.afterUserMessage,
+              hasObjectives,
+              listening: input.listening ?? false,
             }),
           },
           {

@@ -90,6 +90,9 @@ export const enUi = {
     userNameHint:
       "This name labels your messages, especially in conversations with several characters.",
     continue: "Continue",
+    skipConnection: "Set up the connection later",
+    skipConnectionHint:
+      "To use a remote gateway such as OpenRouter, create your character now, then add the connection in Settings.",
   },
 
   cast: {
@@ -124,6 +127,21 @@ export const enUi = {
     makeEnter: (name: string) => `Bring ${name} in`,
     enter: "Enter",
     allPresent: "All your characters are present.",
+    objectives: "Secret goals",
+    objectivesHidden:
+      "Each character wants something and won't say it. Try to guess, or peek.",
+    objectivesNone: "No goals yet: they will be written before the next line.",
+    objectivesOff: "Secret goals are turned off in Settings.",
+    reveal: "Peek",
+    hide: "Hide",
+    redistribute: "Deal new goals",
+    goalLabel: "Wants",
+    secretLabel: "Hides",
+    noGoal: "No goal",
+    editedByYou: "edited by you",
+    goalPlaceholder: "get Marc to admit he sold the house",
+    secretPlaceholder: "Optional",
+    goalHint: "Leave the goal empty for this character to have none.",
     describeArrival: "Describe their arrival",
     describeDeparture: "Describe their departure",
     narrationHint:
@@ -271,6 +289,8 @@ export const enUi = {
     welcomeEmpty: "Create a character first, on the Characters page.",
     everyone: "everyone",
     interrupted: "Response interrupted",
+    showWholeLine: "Show it all ⏭",
+    showWholeLineHint: "Show the rest of the line now",
     regenerate: "Regenerate",
     idleCountdown: (seconds: number) =>
       `Without a reply from you, the conversation resumes in ${seconds} s.`,
@@ -279,6 +299,7 @@ export const enUi = {
     scenePaused: "Scene paused: the characters no longer continue on their own.",
     resume: "Resume",
     whoSpeaks: "Deciding who speaks…",
+    writingObjectives: "Dealing out secret goals…",
     isAnswering: (name: string) => `${name} is answering…`,
     thenSpeakers: (names: string) => `next: ${names}`,
     sceneContinuesBelow: "The scene continues below",
@@ -611,6 +632,13 @@ export const enUi = {
       "stage direction that shakes things up: news arriving, an incident, an " +
       "unexpected gesture. It costs one short extra request, at most once " +
       `every ${lines} lines.`,
+    sceneObjectives: "Secret goals",
+    sceneObjectivesHint:
+      "When a scene with several characters starts, or someone walks in, the " +
+      "model gives each of them a goal of their own that cuts across someone " +
+      "else's, sometimes with a secret. They pursue it even when you say " +
+      "nothing. It costs one extra request per cast; you can read and edit " +
+      "the goals in the cast panel.",
     characterBehaviour: "Character behaviour",
     defaultPersona: "Character offered when starting a conversation",
     noneOption: "— None —",
@@ -637,6 +665,15 @@ export const enUi = {
       small: { label: "Small", description: "More text on screen" },
       normal: { label: "Normal", description: "Balanced reading" },
       large: { label: "Large", description: "More comfortable reading" },
+    },
+    revealSpeed: "Line speed",
+    revealSpeedHint:
+      "Lines appear at reading pace, and the next character waits until you have read the last one.",
+    revealSpeeds: {
+      slow: { label: "Slow", description: "Time to take it all in" },
+      normal: { label: "Normal", description: "An even reading pace" },
+      fast: { label: "Fast", description: "For skimmers" },
+      instant: { label: "Instant", description: "As fast as the model writes" },
     },
     threadSpacing: "Thread spacing",
     threadSpacingHint: "Changes the air between messages without altering them.",
@@ -695,6 +732,7 @@ export const enUi = {
     narrationSpeaker: "Scene",
     generatedTwist: "Twist written by the model to get the scene moving",
     twistWillHappen: "The twist will happen as soon as the current line ends.",
+    objectivesFailed: "The model didn't return usable goals. Try again, or write them yourself.",
     twistFailed: "The director came up empty this time. Roll the die again!",
     personaWillEnter: (name: string) =>
       `${name} will enter at the end of the current turn.`,

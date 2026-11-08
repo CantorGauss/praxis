@@ -52,6 +52,22 @@ without waiting for your turn, even at the start of a scene. **Take the floor**
 or send a message to let the current line finish and join back in. This mode
 stays with the open conversation and overrides the usual automatic-turn limit.
 
+However fast the model writes, lines appear at reading pace — with a breath at
+every comma and full stop — and the next character waits until you've read the
+last one. Pick slow, normal, fast or instant in Settings, or click **Show it
+all** to skip ahead.
+
+**Each of them wants something.** When a group scene starts, or someone walks
+in, the model hands every character a secret goal for the scene — get a
+confession out of Marc, keep the keys, make Anna leave before midnight —
+written to cut across someone else's, sometimes with a secret attached. Each
+character only knows their own, and works toward it line after line, so the
+scene keeps moving even when you say nothing. The director picks whoever has the
+most to gain by speaking next, twists aim at what people are after, and the
+morning-after review says who got what they wanted. Goals stay hidden in the
+cast panel until you peek; you can rewrite them, clear one, or deal a new hand.
+One extra request per cast, and you can switch it off in Settings.
+
 **When they go in circles, something happens.** Characters are told to move the
 scene forward — disagree, reveal, decide — rather than politely agree. If the
 last few lines still keep circling the same words, or everyone just nods along,

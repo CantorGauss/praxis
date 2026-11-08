@@ -20,6 +20,11 @@
     app.activeConnection?.baseUrl ?? "http://localhost:8080/v1",
   );
   let testing = $state(false);
+  /**
+   * Connexion laissée pour plus tard : un serveur distant (OpenRouter…) se
+   * configure dans les Réglages, avec sa clé et l'accord explicite qu'il exige.
+   */
+  let skipped = $state(false);
   let error = $state<string | null>(null);
   let models = $state<ModelInfo[]>([]);
 
@@ -63,6 +68,7 @@
         error = s.onboarding.noModelLoaded;
         return;
       }
+      skipped = false;
       step = 2;
     } catch (e) {
       error = String(e);
@@ -71,9 +77,15 @@
     }
   }
 
+  function skipConnection() {
+    skipped = true;
+    error = null;
+    step = 2;
+  }
+
   async function finish() {
     const connection = app.activeConnection;
-    if (connection) {
+    if (connection && !skipped) {
       await app.updateConnection({ ...connection, baseUrl });
     }
     // Vide reste vide : le libellé générique de la langue prend le relais.
@@ -97,6 +109,11 @@
     await app.saveSettings();
     await app.reloadPersonas();
     await app.refreshEmotionalState();
+    if (skipped) {
+      app.view = "settings";
+      void app.refreshConnection();
+      return;
+    }
     app.connected = true;
     app.models = models;
     // On arrive rideau baissé : le premier salon reste à composer.
@@ -155,6 +172,10 @@
       <button class="btn primary" disabled={testing} onclick={() => void connect()}>
         {testing ? s.onboarding.connecting : s.onboarding.testConnection}
       </button>
+      <button class="link" disabled={testing} onclick={skipConnection}>
+        {s.onboarding.skipConnection}
+      </button>
+      <span class="hint">{s.onboarding.skipConnectionHint}</span>
     {:else}
       <p>{s.onboarding.createFirstCharacter}</p>
       <div class="field">
@@ -313,6 +334,18 @@
   .hint {
     font-size: 12.5px;
     color: var(--text-faint);
+  }
+
+  .link {
+    align-self: flex-start;
+    margin-top: 10px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .actions {

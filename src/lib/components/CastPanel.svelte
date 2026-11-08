@@ -78,6 +78,29 @@
     }
   }
 
+  /**
+   * Les objectifs sont cachés par défaut : le jeu, c'est de deviner ce que
+   * chacun cherche. On y jette un œil quand on veut.
+   */
+  let revealed = $state(false);
+  let editingGoal = $state<{ personaId: string; goal: string; secret: string } | null>(null);
+
+  function objectiveOf(personaId: string) {
+    return app.currentConversation?.objectives.find((o) => o.personaId === personaId) ?? null;
+  }
+
+  function startEditGoal(personaId: string) {
+    const objective = objectiveOf(personaId);
+    editingGoal = { personaId, goal: objective?.goal ?? "", secret: objective?.secret ?? "" };
+  }
+
+  async function saveGoal() {
+    if (!editingGoal) return;
+    const { personaId, goal, secret } = editingGoal;
+    editingGoal = null;
+    await app.updateObjective(personaId, goal, secret);
+  }
+
   /** Entrées et sorties en attente ; un imprévu en file s'annonce ailleurs. */
   const castActions = $derived(
     app.pendingSceneActions.filter((action) => action.kind !== "twist"),
@@ -170,6 +193,76 @@
           </button>
         </div>
         <p class="control-hint">{s.cast.idleHint}</p>
+      </section>
+
+      <section class="objectives">
+        <div class="objectives-head">
+          <h4>{s.cast.objectives}</h4>
+          {#if app.settings.sceneObjectives}
+            <button class="act" onclick={() => (revealed = !revealed)}>
+              {revealed ? s.cast.hide : s.cast.reveal}
+            </button>
+          {/if}
+        </div>
+        {#if !app.settings.sceneObjectives}
+          <p class="control-hint">{s.cast.objectivesOff}</p>
+        {:else if !revealed}
+          <p class="control-hint">{s.cast.objectivesHidden}</p>
+        {:else}
+          {#each present as p (p.id)}
+            {@const objective = objectiveOf(p.id)}
+            <div class="objective" style:--speaker-c={personaAccent(p.id)}>
+              <div class="objective-name">
+                {p.name}
+                {#if objective?.origin === "user"}
+                  <span class="tag">{s.cast.editedByYou}</span>
+                {/if}
+              </div>
+              {#if editingGoal?.personaId === p.id}
+                <label class="goal-field">
+                  <span>{s.cast.goalLabel}</span>
+                  <textarea
+                    rows="3"
+                    bind:value={editingGoal.goal}
+                    placeholder={s.cast.goalPlaceholder}
+                  ></textarea>
+                </label>
+                <label class="goal-field">
+                  <span>{s.cast.secretLabel}</span>
+                  <textarea
+                    rows="2"
+                    bind:value={editingGoal.secret}
+                    placeholder={s.cast.secretPlaceholder}
+                  ></textarea>
+                </label>
+                <span class="hint">{s.cast.goalHint}</span>
+                <div class="form-actions">
+                  <button class="btn" onclick={() => (editingGoal = null)}>{s.common.cancel}</button>
+                  <button class="btn primary" onclick={() => void saveGoal()}>{s.common.save}</button>
+                </div>
+              {:else}
+                {#if !objective}
+                  <p class="objective-empty">{s.cast.objectivesNone}</p>
+                {:else if !objective.goal.trim()}
+                  <p class="objective-empty">{s.cast.noGoal}</p>
+                {:else}
+                  <p class="objective-line"><strong>{s.cast.goalLabel}</strong> {objective.goal}</p>
+                  {#if objective.secret}
+                    <p class="objective-line"><strong>{s.cast.secretLabel}</strong> {objective.secret}</p>
+                  {/if}
+                {/if}
+                <button class="act" onclick={() => startEditGoal(p.id)}>{s.common.edit}</button>
+              {/if}
+            </div>
+          {/each}
+          <button
+            class="btn redistribute"
+            disabled={!app.userHasFloor || !app.currentConversation}
+            onclick={() => void app.regenerateObjectives()}
+          >
+            {app.plotting ? s.chat.writingObjectives : s.cast.redistribute}
+          </button>
+        {/if}
       </section>
     {/if}
 
@@ -541,6 +634,91 @@
   .form-actions .btn {
     font-size: 12px;
     padding: 4px 10px;
+  }
+
+  .objectives-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 4px;
+  }
+
+  .objectives .control-hint {
+    margin: 0 4px;
+  }
+
+  .objective {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+    padding: 7px 9px;
+    border-radius: 9px;
+    border-left: 3px solid var(--speaker-c);
+    background: var(--bg-panel);
+  }
+
+  .objective .act {
+    align-self: flex-end;
+  }
+
+  .objective-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .tag {
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  .objective-line,
+  .objective-empty {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-soft);
+  }
+
+  .objective-line strong {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .objective-empty {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+
+  .goal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .goal-field textarea {
+    font-size: 12px;
+  }
+
+  .objective .hint {
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .redistribute {
+    width: 100%;
+    justify-content: center;
+    padding: 5px 8px;
+    font-size: 11.5px;
   }
 
   .situation {

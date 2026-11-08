@@ -133,6 +133,8 @@ export type TwistInput = {
   pack?: PromptPack;
   /** Imprévu réclamé par l'utilisateur, avec sa couleur ; absent quand la scène s'enlise seule. */
   theme?: TwistTheme | null;
+  /** Ce que chacun cherche en secret, déjà mis en forme. */
+  objectives?: string | null;
 };
 
 /** Thèmes proposés dans l'interface, dans l'ordre d'affichage. */
@@ -199,6 +201,7 @@ export async function inventSceneTwist(input: TwistInput): Promise<string | null
                 transcript: transcript || pack.director.emptyTranscript,
                 theme: input.theme ? pack.twist.themes[input.theme] : null,
                 previousTwists,
+                objectives: input.objectives ?? null,
               }),
             },
           ],

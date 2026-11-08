@@ -99,6 +99,8 @@ export type AssembleInput = {
   missedEarlier?: boolean;
   /** Situation de départ de la conversation, connue de tous les personnages. */
   sceneDescription?: string | null;
+  /** Ce que ce personnage veut dans la scène ; connu de lui seul. */
+  objective?: { goal: string; secret: string | null } | null;
   contextTokens: number;
   reserveOutputTokens: number;
   scene?: SceneInput | null;
@@ -209,6 +211,13 @@ function buildSystemPrompt(
     parts.push(a.startingSituation(situation));
   }
 
+  // Le but du personnage, propre à lui seul. Stable pendant la scène : il
+  // reste dans le préfixe, comme la situation.
+  const goal = input.objective?.goal.trim();
+  if (goal) {
+    parts.push(a.objective(goal, input.objective?.secret?.trim() || null));
+  }
+
   // L'interface affiche déjà *ceci* en didascalie : le modèle doit connaître
   // la même convention, sinon il lit les actions comme des paroles.
   parts.push(a.writingConventions(userName, userGender));
@@ -295,6 +304,13 @@ function buildVolatileBlock(input: AssembleInput): string {
   const pinned = input.memory?.facts.filter((f) => f.pinned) ?? [];
   if (pinned.length > 0) {
     volatileParts.push(a.pinnedReminder(pinned.map((f) => f.text)));
+  }
+
+  // Le but pèse surtout au moment d'écrire : placé tout en haut, un petit
+  // modèle l'oublie dès que la conversation l'entraîne ailleurs.
+  const goal = input.objective?.goal.trim();
+  if (goal) {
+    volatileParts.push(a.objectiveReminder(goal));
   }
 
   // Même raison pour la fiche : une fois que le personnage s'est contredit

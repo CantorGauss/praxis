@@ -913,6 +913,14 @@ fn migrations() -> Vec<Migration> {
             // la reconstruction.
             sql: "ALTER TABLE conversations ADD COLUMN memory TEXT;",
         },
+        Migration {
+            version: 14,
+            description: "conversation_objectives",
+            kind: MigrationKind::Up,
+            // Objectifs de scène en JSON : ce que chaque personnage veut
+            // obtenir et ce qu'il cache. NULL = pas encore écrits.
+            sql: "ALTER TABLE conversations ADD COLUMN objectives TEXT;",
+        },
     ]
 }
 

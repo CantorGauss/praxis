@@ -224,6 +224,27 @@ export const enPrompts: PromptPack = {
       `Every character present knows this setting. Take it as given without ` +
       `reciting it, and do not contradict any of its elements.`,
 
+    objective: (goal, secret) =>
+      `[WHAT YOU WANT IN THIS SCENE]\n` +
+      `Your goal: ${goal}\n` +
+      (secret ? `What you are hiding: ${secret}\n` : "") +
+      `Only you know this: the others have goals of their own, which may cut ` +
+      `across yours. Pursue it actively, line after line, the way your ` +
+      `character would: make your moves, probe, insist, bargain, deflect, bluff, ` +
+      `or give ground on a detail to win what matters. Never announce it outright ` +
+      `and never recite it.` +
+      (secret
+        ? ` Only give your secret away if the scene corners you, or if telling ` +
+          `it finally serves your goal.`
+        : "") +
+      ` If the scene changes the situation, your goal may shift, but you don't ` +
+      `drop it without a reason.`,
+
+    objectiveReminder: (goal) =>
+      `[YOUR GOAL]\n${goal}\n` +
+      `This line must bring you closer to it, even by a small step, or stop ` +
+      `someone from pushing you away from it. Don't state it outright.`,
+
     identityReminder: (personaName, description) =>
       `[WHO YOU ARE, ${personaName.toUpperCase()}]\n${description}\n` +
       `This profile is authoritative on your past and your relationships. If ` +
@@ -395,7 +416,7 @@ export const enPrompts: PromptPack = {
   },
 
   director: {
-    system: ({ userName, afterUserMessage }) =>
+    system: ({ userName, afterUserMessage, hasObjectives, listening }) =>
       "You are the director of a conversation. You play no character and you " +
       "write no dialogue: you only decide who speaks now.\n" +
       "Answer ONLY with a JSON array of names, in speaking order. " +
@@ -409,11 +430,22 @@ export const enPrompts: PromptPack = {
       "Consider explicit intentions and pending proposals without making everyone speak. " +
       (afterUserMessage
         ? `${userName} has just spoken: at least one character must answer.`
-        : `${userName} has fallen silent: the array may be empty if the scene naturally settles.`),
+        : hasObjectives && listening
+          ? `${userName} is listening: the scene goes on without them. Each character ` +
+            `has a goal of their own (shown after "wants:"). Pick whoever has the most to ` +
+            `gain by acting now: someone whose goal was just thwarted, or who can seize ` +
+            `the moment to push theirs. Do not return an empty array.`
+          : hasObjectives
+            ? `Each character has a goal of their own (shown after "wants:"). Only pick ` +
+              `someone if the last line really touches their goal and they cannot let it ` +
+              `pass. Otherwise return []: ${userName} takes the floor back.`
+            : `${userName} has fallen silent: the array may be empty if the scene naturally settles.`),
     user: ({ roster, transcript }) =>
       `Characters present:\n${roster}\n\n` +
       `Latest lines:\n${transcript}\n\n` +
       "Who speaks now?",
+    rosterLine: (name, description, goal) =>
+      `- ${name}` + (description ? `: ${description}` : "") + (goal ? ` — wants: ${goal}` : ""),
     transcriptLine: (name, content) => `${name}: ${content}`,
     narrationLine: (content) => `(Scene: ${content})`,
     emptyTranscript: "(the scene is starting)",
@@ -451,10 +483,14 @@ export const enPrompts: PromptPack = {
       "Reply on two lines, no quotes or commentary:\n" +
       "Stake: what matters most in the scene right now, using its proper names\n" +
       "Stage direction: the twist that tips over that precise stake",
-    user: ({ situation, summary, roster, transcript, theme, previousTwists }) =>
+    user: ({ situation, summary, roster, transcript, theme, previousTwists, objectives }) =>
       (situation ? `Starting situation:\n${situation}\n\n` : "") +
       (summary ? `What has happened so far:\n${summary}\n\n` : "") +
       `Characters present:\n${roster}\n\n` +
+      (objectives
+        ? `What each of them secretly wants (for you only, don't reveal it outright):\n` +
+          `${objectives}\nA good twist brings someone closer to their goal, or makes it harder.\n\n`
+        : "") +
       `Latest lines:\n${transcript}\n\n` +
       (previousTwists?.length
         ? `Stage directions already played, not to be imitated:\n` +
@@ -507,12 +543,59 @@ export const enPrompts: PromptPack = {
       "- the review is three to five witty sentences, in the present tense.\n" +
       "Reply ONLY with JSON, no commentary: " +
       '{"newspaper":"…","headline":"…","stars":3,"review":"…"}',
-    user: ({ situation, summary, roster, transcript }) =>
+    user: ({ situation, summary, roster, transcript, objectives }) =>
       (situation ? `Starting situation:\n${situation}\n\n` : "") +
       (summary ? `The play so far, in summary:\n${summary}\n\n` : "") +
       `Cast:\n${roster}\n\n` +
+      (objectives
+        ? `What each of them secretly wanted (the programme let you in on it):\n${objectives}\n` +
+          `Say who got what they wanted, who got outplayed, which secret came out.\n\n`
+        : "") +
       `The play:\n${transcript}\n\n` +
       "Curtain. Write your review.",
+  },
+
+  objectives: {
+    system: ({ userName }) =>
+      "You are the author of an improvised play. Before the scene is played, you " +
+      "give some of the characters a goal: what they want to get here and now, " +
+      "and from whom. That is what will move the scene forward when nobody is " +
+      "leading it.\n" +
+      "Rules:\n" +
+      "- a concrete goal that can be won or lost during the scene: get a " +
+      "confession, a promise, an agreement, a favour, money, someone to leave, " +
+      "forgiveness; hide something; change someone's mind. Never a feeling " +
+      "(\"be happy\") or a vague wish (\"get to know each other\");\n" +
+      `- it targets someone present, by name: another character or ${userName};\n` +
+      "- the goals cut across each other: each one gets in the way of at least " +
+      "one other, without everyone fighting over the same thing;\n" +
+      "- it follows from the character's profile, the situation and what has " +
+      "already been said, contradicting none of it;\n" +
+      "- add a secret if it serves the goal: something the character knows or " +
+      "did and won't say, which could come out during the scene. Otherwise leave " +
+      "it empty;\n" +
+      `- invent no names of people; ${userName} has no goal;\n` +
+      "- write the goal as an infinitive phrase without the character's name " +
+      "(\"get Marc to…\"); the secret as one sentence;\n" +
+      "- at most 25 words per field.\n" +
+      "Reply ONLY with a JSON array, no commentary:\n" +
+      '[{"name":"…","goal":"…","secret":"…"}]',
+    user: ({ situation, summary, roster, assigned, transcript, names }) =>
+      (situation ? `Starting situation:\n${situation}\n\n` : "") +
+      (summary ? `What has happened so far:\n${summary}\n\n` : "") +
+      `Characters present:\n${roster}\n\n` +
+      (assigned
+        ? `Goals already given, to keep as they are and to cut across:\n${assigned}\n\n`
+        : "") +
+      (transcript ? `Latest lines:\n${transcript}\n\n` : "") +
+      `Give a goal to: ${names.join(", ")}.`,
+    rosterLine: (name, description, privatePrompt) =>
+      `- ${name}` +
+      (description ? `: ${description}` : "") +
+      (privatePrompt ? `\n  (character: ${privatePrompt.replace(/\s+/g, " ")})` : ""),
+    assignedLine: (name, goal) => `- ${name} wants: ${goal}`,
+    goalLine: (name, goal, secret) =>
+      `- ${name} wants: ${goal}` + (secret ? ` (hiding: ${secret})` : ""),
   },
 
   coordination: {
