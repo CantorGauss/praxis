@@ -104,6 +104,8 @@ export type AssemblerPrompts = {
   /** Invitation ponctuelle à en glisser un, placée en fin de requête. */
   asideNudge(): string;
   conversationSummary(summary: string): string;
+  /** Le personnage n'a pas assisté à toute la scène : il ignore ce qu'il a manqué. */
+  partialPresence(): string;
   immediateReaction(input: {
     moodLabel: string;
     intensityPercent: number;

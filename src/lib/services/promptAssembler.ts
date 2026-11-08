@@ -80,6 +80,11 @@ export type AssembleInput = {
   /** Invitation ponctuelle à glisser un aparté ; seulement en scène de groupe. */
   asideNudge?: boolean;
   recentMessages: Message[]; // du plus ancien au plus récent
+  /**
+   * Le locuteur a manqué une partie de la scène (arrivée tardive, absence) :
+   * l'historique transmis est déjà limité à ce qu'il a vu.
+   */
+  missedEarlier?: boolean;
   /** Situation de départ de la conversation, connue de tous les personnages. */
   sceneDescription?: string | null;
   contextTokens: number;
@@ -178,6 +183,10 @@ function buildSystemPrompt(
 
   if (includeSummary && summary) {
     parts.push(a.conversationSummary(stripSummaryMarkers(summary)));
+  }
+
+  if (input.missedEarlier) {
+    parts.push(a.partialPresence());
   }
 
   return parts.join("\n\n");
