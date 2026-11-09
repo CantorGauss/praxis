@@ -4,8 +4,7 @@ import {
   publicText,
   splitActions,
   splitAsides,
-  splitMessage,
-} from "../messageFormat";
+  splitMessage, recentGestures } from "../messageFormat";
 
 describe("splitActions", () => {
   it("sépare paroles et actions", () => {
@@ -88,5 +87,31 @@ describe("apartés", () => {
       { kind: "speech", text: " Merci. " },
       { kind: "aside", text: "enfin" },
     ]);
+  });
+});
+
+describe("recentGestures", () => {
+  const line = (content: string, role = "assistant", kind = "speech") => ({ role, kind, content });
+
+  it("liste les gestes des dernières répliques, du plus récent, sans doublon", () => {
+    expect(
+      recentGestures([
+        line("*sourit en coin* Allez."),
+        line("*pose ses clés* Je rentre.", "user"),
+        line("(Scène : la porte claque)", "user", "narration"),
+        line("*hausse les épaules.* Bof. *Sourit en coin*"),
+        line("Sans geste."),
+      ]),
+    ).toEqual(["hausse les épaules", "Sourit en coin"]);
+  });
+
+  it("ne remonte que quelques répliques, plafonne et raccourcit", () => {
+    const old = line("*geste ancien* Hier.");
+    const recent = Array.from({ length: 6 }, (_, i) => line(`*geste ${i}* Ligne.`));
+    const gestures = recentGestures([old, ...recent], { limit: 4 });
+    expect(gestures).toEqual(["geste 5", "geste 4", "geste 3", "geste 2"]);
+    const [long] = recentGestures([line(`*${"très ".repeat(40)}long* Oui.`)]);
+    expect(long.length).toBeLessThanOrEqual(81);
+    expect(long.endsWith("…")).toBe(true);
   });
 });

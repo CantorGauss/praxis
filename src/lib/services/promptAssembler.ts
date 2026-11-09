@@ -11,7 +11,7 @@ import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
-import { publicText } from "./messageFormat";
+import { publicText, recentGestures } from "./messageFormat";
 import { rankByRelevance, recallPassages, type RecallDocument } from "./recall";
 import {
   buildSceneBlock,
@@ -171,6 +171,9 @@ function buildSystemPrompt(
   const ownDescription =
     description && !systemPrompt.includes(description) ? description : null;
   parts.push(a.identity(persona.name, systemPrompt, ownDescription));
+  // La voix vient juste après l'identité : c'est elle qui dit que la fiche du
+  // personnage l'emporte sur les règles de style qui suivent.
+  parts.push(a.voice());
   parts.push(a.humanInterlocutor(userName, userGender));
 
   if (persona.stableTraits.length > 0) {
@@ -312,6 +315,11 @@ function buildVolatileBlock(input: AssembleInput): string {
   if (goal) {
     volatileParts.push(a.objectiveReminder(goal));
   }
+
+  // Les consignes de forme placées en haut s'oublient vite : sans ce rappel,
+  // chaque réplique finissait par s'ouvrir sur une longue didascalie de
+  // clichés (« mon cœur cognant dans ma poitrine »).
+  volatileParts.push(a.voiceReminder(recentGestures(input.recentMessages)));
 
   // Même raison pour la fiche : une fois que le personnage s'est contredit
   // (« on se connaît depuis deux mois ? »), ses propres répliques pèsent plus

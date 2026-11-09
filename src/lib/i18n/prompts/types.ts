@@ -100,6 +100,11 @@ export type AssemblerPrompts = {
   humanInterlocutor(userName: string, userGender: Gender): string;
   stableTraits(traits: string[]): string;
   responseLength(instruction: string): string;
+  /**
+   * La voix du personnage : de l'oral, dans son registre. Sa propre fiche
+   * l'emporte sur les règles générales de style.
+   */
+  voice(): string;
   emotionalPlay(): string;
   /** Ce qui pousse chaque réplique à faire avancer la scène. */
   momentum(): string;
@@ -119,6 +124,8 @@ export type AssemblerPrompts = {
    * plutôt que le haut du prompt.
    */
   identityReminder(personaName: string, description: string): string;
+  /** Rappel de style juste avant la réplique : les consignes de forme s'oublient vite. */
+  voiceReminder(recentGestures: string[]): string;
   writingConventions(userName: string, userGender: Gender): string;
   /** Règle des apartés, en scène de groupe : dits au public, entendus de personne. */
   asides(): string;

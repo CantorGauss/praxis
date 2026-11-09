@@ -91,3 +91,32 @@ export function splitMessage(content: string): RenderedSegment[] {
       : splitActions(segment.text),
   );
 }
+
+/**
+ * Gestes déjà faits dans les dernières répliques des personnages, du plus
+ * récent au plus ancien, sans doublon. Les nommer est plus efficace qu'un
+ * vague « ne te répète pas » : sans eux, chacun refaisait le même « sourire
+ * en coin » toutes les deux répliques.
+ */
+export function recentGestures(
+  messages: readonly { role: string; kind?: string; content: string }[],
+  { lines = 6, limit = 6, maxChars = 80 } = {},
+): string[] {
+  const gestures: string[] = [];
+  const recent = messages
+    .filter((m) => m.role === "assistant" && (m.kind ?? "speech") === "speech")
+    .slice(-lines)
+    .reverse();
+  for (const message of recent) {
+    for (const segment of splitMessage(message.content)) {
+      if (segment.kind !== "action") continue;
+      let text = segment.text.replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");
+      if (!text) continue;
+      if (text.length > maxChars) text = `${text.slice(0, maxChars).trimEnd()}…`;
+      if (gestures.some((g) => g.toLowerCase() === text.toLowerCase())) continue;
+      gestures.push(text);
+      if (gestures.length >= limit) return gestures;
+    }
+  }
+  return gestures;
+}

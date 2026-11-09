@@ -198,7 +198,8 @@ describe("assemblePrompt", () => {
   it("abandonne la mémoire avant les répliques récentes quand le budget est serré", () => {
     const input = baseInput({
       memory: mem("s".repeat(4000)),
-      contextTokens: 1250,
+      // Assez pour la base (~1 200 tokens) et les répliques, pas pour la mémoire.
+      contextTokens: 1500,
       reserveOutputTokens: 200,
     });
     const result = assemblePrompt(input);
@@ -297,7 +298,7 @@ describe("assemblePrompt", () => {
     const result = assemblePrompt(baseInput());
     expect(result.system).toContain("[INTERLOCUTEUR HUMAIN]");
     expect(result.system).toContain("s'appelle Jeff");
-    expect(result.system).toContain("« Jeff » uniquement");
+    expect(result.system).toContain("« Jeff », jamais par un identifiant");
     expect(result.system).toContain("identifiant de machine");
   });
 
@@ -324,7 +325,7 @@ describe("assemblePrompt", () => {
     const tail = result.messages.at(-1)!.content;
     expect(tail).toContain("[QUI TU ES, ANNA]");
     expect(tail).toContain("amie d'enfance de Jeff");
-    expect(tail).toContain("c'était une erreur de ta part");
+    expect(tail).toContain("c'était une erreur : reconnais-la simplement");
     expect(tail.indexOf("[QUI TU ES, ANNA]")).toBeGreaterThan(tail.indexOf("[CONTEXTE TEMPOREL]"));
   });
 
@@ -356,8 +357,8 @@ describe("assemblePrompt", () => {
     );
     expect(result.system).toContain("[JEU ÉMOTIONNEL]");
     expect(result.messages.at(-1)?.content).toContain("[RÉACTION IMMÉDIATE]");
-    expect(result.messages.at(-1)?.content).toContain("Intensité : 92 %");
-    expect(result.messages.at(-1)?.content).toContain("Ne reviens pas immédiatement");
+    expect(result.messages.at(-1)?.content).toContain("(intensité 92 %)");
+    expect(result.messages.at(-1)?.content).toContain("Ne reviens pas au calme");
   });
 });
 
@@ -377,9 +378,48 @@ describe("assemblePrompt : élan de la scène", () => {
     expect(result.system).not.toContain("[LA SCÈNE PIÉTINE]");
   });
 
-  it("limite les didascalies des personnages", () => {
-    expect(assemblePrompt(baseInput()).system).toContain("Au plus une didascalie courte par réplique");
-    expect(assemblePrompt(baseInput({ pack: enPrompts })).system).toContain("At most one short stage direction per line");
+  it("limite les didascalies des personnages, au plus près de la réplique", () => {
+    expect(assemblePrompt(baseInput()).messages.at(-1)?.content).toContain("la plupart des répliques n'en ont pas, jamais plus d'un");
+    expect(assemblePrompt(baseInput({ pack: enPrompts })).messages.at(-1)?.content).toContain("most lines have none, never more than one");
+  });
+});
+
+describe("assemblePrompt : voix des personnages", () => {
+  it("place la voix juste après l'identité et laisse la fiche l'emporter sur le style", () => {
+    const fr = assemblePrompt(baseInput()).system;
+    expect(fr).toContain("[VOIX]");
+    expect(fr).toContain("Sa propre fiche l'emporte sur les règles de style");
+    expect(fr.indexOf("[VOIX]")).toBeLessThan(fr.indexOf("[JEU ÉMOTIONNEL]"));
+    expect(fr.indexOf("[VOIX]")).toBeGreaterThan(fr.indexOf("Tu es Anna"));
+    const en = assemblePrompt(baseInput({ pack: enPrompts })).system;
+    expect(en).toContain("[VOICE]");
+    expect(en).toContain("Your character's own description outranks");
+  });
+
+  it("interdit les clichés corporels et rappelle la façon de parler juste avant la réplique", () => {
+    const fr = assemblePrompt(baseInput());
+    expect(fr.system).toContain("ni cœur qui cogne");
+    expect(fr.system).not.toContain("au besoin un geste");
+    expect(fr.messages.at(-1)?.content).toContain("[TA FAÇON DE PARLER]");
+    const en = assemblePrompt(baseInput({ pack: enPrompts }));
+    expect(en.system).toContain("no pounding heart");
+    expect(en.messages.at(-1)?.content).toContain("[HOW YOU TALK]");
+  });
+
+  it("demande de commencer par la parole et nomme les gestes déjà faits", () => {
+    const result = assemblePrompt(baseInput({
+      recentMessages: [
+        message("1", "assistant", "*sourit en coin* Tu rougis."),
+        message("2", "user", "Non."),
+        message("3", "assistant", "*plisse les yeux* Si.", "p2"),
+      ],
+    }));
+    const tail = result.messages.at(-1)?.content ?? "";
+    expect(tail).toContain("Commence par ce que tu dis");
+    expect(tail).toContain("pas « *je pose…* »");
+    expect(tail).toMatch(/n'en reprends aucun[^]*- plisse les yeux\n- sourit en coin/);
+    expect(assemblePrompt(baseInput({ recentMessages: [message("1", "user", "Salut")] })).messages.at(-1)?.content)
+      .not.toContain("Gestes déjà faits");
   });
 });
 
