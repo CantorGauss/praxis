@@ -1,6 +1,6 @@
 {
   "name": "praxis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local pocket theatre — chat with persistent characters on a local LLM",
   "type": "module",
   "scripts": {
