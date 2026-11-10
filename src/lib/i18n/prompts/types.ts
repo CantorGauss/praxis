@@ -100,6 +100,13 @@ export type AssemblerPrompts = {
   identity(personaName: string, systemPrompt: string, description?: string | null): string;
   humanInterlocutor(userName: string, userGender: Gender): string;
   stableTraits(traits: string[]): string;
+  /** Connaissances permanentes du personnage (entrées « toujours » du lorebook). */
+  knowledge(entries: string[]): string;
+  /**
+   * Connaissances que les dernières répliques viennent d'évoquer, rappelées
+   * en fin de requête : elles changent d'un tour à l'autre.
+   */
+  recalledKnowledge(entries: string[]): string;
   responseLength(instruction: string): string;
   /**
    * La voix du personnage : de l'oral, dans son registre. Sa propre fiche
@@ -277,6 +284,10 @@ export type TranslationPrompts = {
   system(input: { personaName: string; gender: Gender }): string;
   /** La fiche à traduire, déjà mise en JSON. */
   user(sheet: string): string;
+  /** Consigne pour un lot d'entrées du lorebook : contenu et mots-clés. */
+  loreSystem(input: { personaName: string; gender: Gender }): string;
+  /** Le lot à traduire, déjà mis en JSON. */
+  loreUser(entries: string): string;
 };
 
 export type MemoryPrompts = {

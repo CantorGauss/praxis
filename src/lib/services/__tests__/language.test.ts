@@ -33,6 +33,19 @@ describe("sheetLanguageDiffers", () => {
     ).toBe("en");
   });
 
+  it("tient compte des connaissances actives", () => {
+    const withLore = (enabled: boolean) => ({
+      ...sheet("Tu es une guérisseuse discrète, et tu ne mens jamais."),
+      lorebook: {
+        entries: [
+          { content: "The forest of Eldoria is old and the trees are always awake.", enabled },
+        ],
+      },
+    });
+    expect(sheetLanguageDiffers(withLore(true), "fr")).toBe("en");
+    expect(sheetLanguageDiffers(withLore(false), "fr")).toBeNull();
+  });
+
   it("se tait quand la langue est la même ou incertaine", () => {
     expect(sheetLanguageDiffers(sheet("He is a retired detective who notices everything."), "en")).toBeNull();
     expect(sheetLanguageDiffers(sheet("Grumpy."), "fr")).toBeNull();

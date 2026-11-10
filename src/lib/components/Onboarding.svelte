@@ -103,6 +103,7 @@
       gender: "neutral",
       avatarSetId: null,
       avatarStyle: appearanceFromSeed(name),
+      lorebook: null,
     });
     app.settings.defaultPersonaId = persona.id;
     app.settings.onboarded = true;

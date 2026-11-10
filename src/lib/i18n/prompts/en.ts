@@ -50,6 +50,19 @@ function objectPronoun(gender: Gender): string {
 
 const USER_LABEL = "User";
 
+/** Rules shared by sheet and lore translations. */
+const EN_TRANSLATION_RULES =
+  "- translate faithfully: add, remove and soften nothing; keep the " +
+  "register, the humour, the swearing and the layout (paragraphs, lists, " +
+  "*actions between asterisks*);\n" +
+  "- do not translate proper names;\n";
+
+function enTranslationPronouns(personaName: string, gender: Gender): string {
+  const pronouns =
+    gender === "feminine" ? "she/her" : gender === "masculine" ? "he/him" : "they/them";
+  return `- ${personaName} goes by ${pronouns};\n`;
+}
+
 export const enPrompts: PromptPack = {
   locale: "en",
   languageName: "English",
@@ -186,6 +199,16 @@ export const enPrompts: PromptPack = {
       `characters and scene directions: only the speaker label says who is ` +
       `talking. Call ${objectPronoun(userGender)} "${userName}", never a machine, ` +
       `model or account identifier.`,
+
+    knowledge: (entries) =>
+      `[WHAT YOU KNOW]\n` +
+      `What you know about your world and your past. Use it when it helps, ` +
+      `never recite it.\n\n${entries.join("\n\n")}`,
+
+    recalledKnowledge: (entries) =>
+      `[WHAT COMES TO MIND]\n` +
+      `The scene just touched on things you know. Here is what you know about ` +
+      `them, to use if it serves your line, never recited.\n\n${entries.join("\n\n")}`,
 
     stableTraits: (traits) =>
       `[STABLE TRAITS]\n${traits.map((t) => `- ${t}`).join("\n")}`,
@@ -557,24 +580,29 @@ export const enPrompts: PromptPack = {
     system: ({ personaName, gender }) =>
       "You translate into English the description of a character from an " +
       "improvised play. Rules:\n" +
-      "- translate faithfully: add, remove and soften nothing; keep the " +
-      "register, the humour, the swearing and the layout (paragraphs, lists, " +
-      "*actions between asterisks*);\n" +
+      EN_TRANSLATION_RULES +
       "- keep the grammatical person of the text: a third-person description " +
       "stays in the third person, one written as « tu » or « vous » becomes « you »;\n" +
-      "- do not translate proper names;\n" +
-      `- ${personaName} goes by ` +
-      (gender === "feminine"
-        ? "she/her"
-        : gender === "masculine"
-          ? "he/him"
-          : "they/them") +
-      ";\n" +
+      enTranslationPronouns(personaName, gender) +
       "- traits stay single words or short phrases, one per entry;\n" +
       "- a field already in English is copied unchanged.\n" +
       "Reply ONLY with a JSON object of the same shape, no commentary:\n" +
       '{"description":"…","character":"…","traits":["…"]}',
     user: (sheet) => `Description to translate:\n${sheet}`,
+    loreSystem: ({ personaName, gender }) =>
+      "You translate into English lorebook entries of a character from an " +
+      "improvised play: what they know about their world. Each entry has a " +
+      "content and keywords that bring it back when they appear in the conversation.\n" +
+      "Rules:\n" +
+      EN_TRANSLATION_RULES +
+      enTranslationPronouns(personaName, gender) +
+      "- for each keyword, give the word or phrase people would use in an English " +
+      "conversation; a proper name stays as it is;\n" +
+      "- keep the i field of every entry, and every entry;\n" +
+      "- a text already in English is copied unchanged.\n" +
+      "Reply ONLY with a JSON object of the same shape, no commentary:\n" +
+      '{"entries":[{"i":0,"keys":["…"],"secondary":["…"],"content":"…"}]}',
+    loreUser: (entries) => `Entries to translate:\n${entries}`,
   },
 
   objectives: {

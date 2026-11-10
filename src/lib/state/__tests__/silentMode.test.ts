@@ -20,7 +20,7 @@ const conversation: Conversation = {
 const personas: Persona[] = ["Anna", "Marc"].map((name) => ({
   id: name.toLowerCase(), name, description: null, systemPrompt: `Tu es ${name}.`,
   stableTraits: [], defaultModelId: null, temperature: 0.7, topP: null,
-  maxOutputTokens: 128, gender: "neutral", avatarSetId: null, avatarStyle: null,
+  maxOutputTokens: 128, gender: "neutral", avatarSetId: null, avatarStyle: null, lorebook: null,
   createdAt: NOW, updatedAt: NOW,
 }));
 

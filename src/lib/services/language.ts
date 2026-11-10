@@ -47,24 +47,38 @@ export function detectLanguage(text: string): Locale | null {
   return best[0];
 }
 
-/** Texte d'une fiche sur lequel juger sa langue. */
-export function personaSheetText(persona: {
+type Sheet = {
   systemPrompt: string;
   description: string | null;
   stableTraits: readonly string[];
-}): string {
+  lorebook?: { entries: readonly { content: string; enabled: boolean }[] } | null;
+};
+
+/** Texte d'une fiche sur lequel juger sa langue (connaissances à part). */
+export function personaSheetText(persona: Sheet): string {
   return [persona.description ?? "", persona.systemPrompt, persona.stableTraits.join(", ")]
     .join("\n");
 }
 
+/** Texte des connaissances actives, jugé séparément : souvent plus long que la fiche. */
+function loreText(persona: Sheet): string {
+  return (persona.lorebook?.entries ?? [])
+    .filter((e) => e.enabled)
+    .map((e) => e.content)
+    .join("\n");
+}
+
 /**
- * Vrai quand la fiche est manifestement écrite dans une autre langue que
- * celle des conversations.
+ * Langue de la fiche ou de ses connaissances quand elle diffère manifestement
+ * de celle des conversations ; null sinon.
  */
 export function sheetLanguageDiffers(
-  persona: { systemPrompt: string; description: string | null; stableTraits: readonly string[] },
+  persona: Sheet,
   conversationLanguage: Locale,
 ): Locale | null {
-  const detected = detectLanguage(personaSheetText(persona));
-  return detected && detected !== conversationLanguage ? detected : null;
+  for (const text of [personaSheetText(persona), loreText(persona)]) {
+    const detected = detectLanguage(text);
+    if (detected && detected !== conversationLanguage) return detected;
+  }
+  return null;
 }

@@ -14,6 +14,7 @@
 
 import type { Gender, Persona } from "../types";
 import type { AvatarAppearance } from "./avatar";
+import { lorebookFromCard, lorebookToCard, type Lorebook } from "./lorebook";
 
 /** Champs communs aux V2 et V3 (la V1 en est un sous-ensemble à plat). */
 export type CharacterCardData = {
@@ -31,6 +32,8 @@ export type CharacterCardData = {
   creator: string;
   character_version: string;
   extensions: Record<string, unknown>;
+  /** Lorebook embarqué, au format SillyTavern ; absent s'il n'y en a pas. */
+  character_book?: Record<string, unknown>;
   // V3 uniquement.
   group_only_greetings?: string[];
   creation_date?: number;
@@ -72,6 +75,7 @@ export type CardPersonaDraft = {
   topP: number | null;
   maxOutputTokens: number | null;
   appearance: unknown;
+  lorebook: Lorebook | null;
 };
 
 const PRAXIS_EXTENSION = "praxis";
@@ -136,6 +140,9 @@ export function normalizeCard(raw: unknown): CharacterCardData | null {
     character_version: str(source.character_version),
     extensions: record(source.extensions),
   };
+  if (source.character_book && typeof source.character_book === "object") {
+    card.character_book = record(source.character_book);
+  }
   return card;
 }
 
@@ -253,6 +260,9 @@ export function cardToPersona(
     topP: finiteOrNull(praxis.topP),
     maxOutputTokens: finiteOrNull(praxis.maxOutputTokens),
     appearance: praxis.appearance ?? null,
+    lorebook: card.character_book
+      ? lorebookFromCard(card.character_book, name, userName)
+      : null,
   };
 }
 
@@ -288,6 +298,9 @@ function cardData(persona: Persona, now: Date): CharacterCardData {
     creator: "",
     character_version: "",
     extensions: { [PRAXIS_EXTENSION]: extension },
+    ...(persona.lorebook && persona.lorebook.entries.length > 0
+      ? { character_book: lorebookToCard(persona.lorebook) }
+      : {}),
     creation_date: Math.floor(new Date(persona.createdAt).getTime() / 1000) || timestamp,
     modification_date: timestamp,
   };

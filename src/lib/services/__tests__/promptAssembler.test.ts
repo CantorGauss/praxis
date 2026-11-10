@@ -23,6 +23,7 @@ function persona(overrides: Partial<Persona> = {}): Persona {
     gender: "neutral",
     avatarSetId: null,
     avatarStyle: null,
+    lorebook: null,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -716,5 +717,92 @@ describe("assemblePrompt — mémoire de scène", () => {
     );
     expect(result.messages.at(-1)!.content).not.toContain("[SOUVENIRS");
     expect(result.recalledPassageCount).toBe(0);
+  });
+});
+
+describe("assemblePrompt et connaissances du personnage", () => {
+  const lore = {
+    version: 1 as const,
+    name: "",
+    description: "",
+    scanDepth: null,
+    tokenBudget: null,
+    extra: {},
+    entries: [
+      {
+        id: "a",
+        comment: "",
+        keys: [],
+        secondaryKeys: [],
+        selective: false,
+        secondaryLogic: "andAny" as const,
+        content: "Anna a grandi au-dessus d'une boulangerie.",
+        constant: true,
+        enabled: true,
+        caseSensitive: false,
+        insertionOrder: 100,
+        extra: {},
+      },
+      {
+        id: "b",
+        comment: "",
+        keys: ["Morel"],
+        secondaryKeys: [],
+        selective: false,
+        secondaryLogic: "andAny" as const,
+        content: "Le dossier Morel n'a jamais été classé.",
+        constant: false,
+        enabled: true,
+        caseSensitive: false,
+        insertionOrder: 100,
+        extra: {},
+      },
+    ],
+  };
+
+  it("met les connaissances permanentes dans la partie stable", () => {
+    const result = assemblePrompt(baseInput({ persona: persona({ lorebook: lore }) }));
+    expect(result.system).toContain("[CE QUE TU SAIS]");
+    expect(result.system).toContain("boulangerie");
+    expect(result.system.indexOf("[CE QUE TU SAIS]")).toBeGreaterThan(
+      result.system.indexOf("[TRAITS STABLES]"),
+    );
+    expect(result.system).not.toContain("Morel");
+    expect(result.loreEntryCount).toBe(1);
+  });
+
+  it("rappelle en fin de requête ce que la scène vient d'évoquer", () => {
+    const result = assemblePrompt(
+      baseInput({
+        persona: persona({ lorebook: lore }),
+        recentMessages: [message("1", "user", "Et l'affaire morel, alors ?")],
+      }),
+    );
+    expect(result.system).not.toContain("Morel");
+    const tail = result.messages.at(-1)!.content;
+    expect(tail).toContain("[CE QUI TE REVIENT]");
+    expect(tail).toContain("Le dossier Morel");
+    expect(result.loreEntryCount).toBe(2);
+  });
+
+  it("n'entend pas les apartés des autres", () => {
+    const result = assemblePrompt(
+      baseInput({
+        persona: persona({ lorebook: lore }),
+        recentMessages: [
+          message("1", "user", "Bonjour."),
+          message("2", "assistant", "Salut. (aparté : je pense à Morel)", "p2"),
+          message("3", "user", "Tu vas bien ?"),
+        ],
+      }),
+    );
+    expect(result.messages.at(-1)!.content).not.toContain("[CE QUI TE REVIENT]");
+  });
+
+  it("parle des connaissances dans la langue du pack", () => {
+    const result = assemblePrompt(
+      baseInput({ pack: enPrompts, persona: persona({ lorebook: lore }) }),
+    );
+    expect(result.system).toContain("[WHAT YOU KNOW]");
   });
 });

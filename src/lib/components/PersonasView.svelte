@@ -25,6 +25,7 @@
   } from "../services/characterCard";
   import { asPng, imageToPng } from "../services/cardImage";
   import { sheetLanguageDiffers } from "../services/language";
+  import LorebookPanel from "./LorebookPanel.svelte";
   import type { Gender, Persona } from "../types";
   import {
     appearanceFromSeed,
@@ -57,6 +58,7 @@
   let selectedId = $state<string | null>(app.personas[0]?.id ?? null);
   let showAdvanced = $state(false);
   let showAvatarPicker = $state(false);
+  let showLore = $state(false);
   let showTemplates = $state(false);
   const selectedPersona = $derived(
     app.personaById(selectedId),
@@ -66,7 +68,9 @@
   let translationError = $state<{ personaId: string; message: string } | null>(null);
   let lastTranslation = $state<{
     personaId: string;
-    before: Pick<Persona, "description" | "systemPrompt" | "stableTraits">;
+    before: Pick<Persona, "description" | "systemPrompt" | "stableTraits" | "lorebook">;
+    /** Connaissances restées dans leur langue. */
+    untranslated: number;
   } | null>(null);
 
   /** Images importées (cartes SillyTavern), par personnage ; elles priment sur le portrait intégré. */
@@ -134,6 +138,7 @@
         ...appearanceFromSeed(seed),
         ...(template ? { portrait: template.portrait } : {}),
       },
+      lorebook: null,
     });
     if (!app.settings.defaultPersonaId) {
       app.settings.defaultPersonaId = created.id;
@@ -231,7 +236,7 @@
     translatingId = p.id;
     translationError = null;
     try {
-      const sheet = await app.translatePersona(p);
+      const { untranslatedEntries, ...sheet } = await app.translatePersona(p);
       // Relu après l'appel : un champ a pu être corrigé pendant la traduction.
       const latest = app.personaById(p.id) ?? p;
       lastTranslation = {
@@ -240,7 +245,9 @@
           description: latest.description,
           systemPrompt: latest.systemPrompt,
           stableTraits: [...latest.stableTraits],
+          lorebook: latest.lorebook,
         },
+        untranslated: untranslatedEntries,
       };
       await patch(latest, sheet);
     } catch (e) {
@@ -487,6 +494,7 @@
               selectedId = p.id;
               showAdvanced = false;
               showAvatarPicker = false;
+              showLore = false;
             }}
           >
             <img src={portraitOf(p)} alt="" />
@@ -538,7 +546,10 @@
             class:active-action={showAvatarPicker}
             onclick={() => {
               showAvatarPicker = !showAvatarPicker;
-              if (showAvatarPicker) showAdvanced = false;
+              if (showAvatarPicker) {
+                showAdvanced = false;
+                showLore = false;
+              }
             }}
             title={s.personas.showAllPortraits}
           >
@@ -547,11 +558,28 @@
           <button
             onclick={() => {
               showAdvanced = !showAdvanced;
-              if (showAdvanced) showAvatarPicker = false;
+              if (showAdvanced) {
+                showAvatarPicker = false;
+                showLore = false;
+              }
             }}
             title={s.personas.responseStyleTitle}
           >
             <span aria-hidden="true">🎚️</span> {showAdvanced ? s.personas.closeSettings : s.personas.responseStyle}
+          </button>
+          <button
+            class:active-action={showLore}
+            aria-expanded={showLore}
+            onclick={() => {
+              showLore = !showLore;
+              if (showLore) {
+                showAdvanced = false;
+                showAvatarPicker = false;
+              }
+            }}
+            title={s.personas.lore.buttonTitle}
+          >
+            <span aria-hidden="true">📚</span> {s.personas.lore.button(p.lorebook?.entries.length ?? 0)}
           </button>
           <button onclick={() => void doExportCard(p)} title={s.personas.exportCardTitle}>
             <span aria-hidden="true">🃏</span> {s.personas.exportCard}
@@ -564,7 +592,12 @@
 
       {#if lastTranslation?.personaId === p.id}
         <div class="language-note">
-          <span>{s.personas.translated}</span>
+          <span>
+            {s.personas.translated}
+            {#if lastTranslation.untranslated > 0}
+              <em class="language-error">{s.personas.untranslatedEntries(lastTranslation.untranslated)}</em>
+            {/if}
+          </span>
           <button class="btn" onclick={() => void restoreOriginal(p)}>
             {s.personas.restoreOriginal}
           </button>
@@ -628,6 +661,13 @@
         onchange={(e) =>
           void patch(p, { systemPrompt: e.currentTarget.value.trim() || p.systemPrompt })}
       ></textarea>
+
+      {#if showLore}
+        <LorebookPanel
+          lorebook={p.lorebook}
+          onchange={(next) => patch(app.personaById(p.id) ?? p, { lorebook: next })}
+        />
+      {/if}
 
       {#if showAdvanced}
         <div class="advanced">

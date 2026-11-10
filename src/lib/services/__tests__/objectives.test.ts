@@ -132,7 +132,7 @@ describe("objectifs dans les prompts", () => {
     const persona: Persona = {
       id: "anna", name: "Anna", description: null, systemPrompt: "Tu es Anna.",
       stableTraits: [], defaultModelId: null, temperature: 0.7, topP: null,
-      maxOutputTokens: 128, gender: "feminine", avatarSetId: null, avatarStyle: null,
+      maxOutputTokens: 128, gender: "feminine", avatarSetId: null, avatarStyle: null, lorebook: null,
       createdAt: NOW, updatedAt: NOW,
     };
     const assembled = assemblePrompt({

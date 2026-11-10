@@ -186,6 +186,44 @@ export const frUi: UiStrings = {
     restoreOriginal: "Rétablir l’original",
     translationFailed:
       "Le modèle n’a rien renvoyé d’exploitable. La fiche n’a pas changé.",
+    untranslatedEntries: (count: number) =>
+      count > 1
+        ? `${count} connaissances n’ont pas pu être traduites et restent dans leur langue d’origine.`
+        : "Une connaissance n’a pas pu être traduite et reste dans sa langue d’origine.",
+    lore: {
+      button: (count: number) => (count > 0 ? `Connaissances (${count})` : "Connaissances"),
+      buttonTitle: "Ce que le personnage sait de son monde (lorebook SillyTavern)",
+      title: "Connaissances",
+      hint:
+        "Ce que le personnage sait de son monde. Une entrée lui revient quand " +
+        "l’un de ses mots-clés apparaît dans les dernières répliques ; « Toujours » " +
+        "la garde en tête en permanence. Les autres personnages n’en savent rien.",
+      add: "+ Entrée",
+      empty:
+        "Aucune connaissance pour l’instant. Les cartes SillyTavern importées apportent leur lorebook.",
+      filter: "Filtrer les entrées",
+      commentPlaceholder: "Titre, pour vous y retrouver",
+      keysPlaceholder: "Mots-clés, séparés par des virgules",
+      keysUnused: "Toujours présente : les mots-clés ne servent pas.",
+      contentPlaceholder: "Ce que le personnage sait, en quelques phrases",
+      constant: "Toujours",
+      enabled: "Active",
+      condition: "Condition",
+      secondaryPlaceholder: "Mots-clés secondaires",
+      logic: {
+        andAny: "et l’un de",
+        andAll: "et tous",
+        notAny: "mais aucun de",
+        notAll: "mais pas tous",
+      },
+      scanDepth: "Répliques relues",
+      scanDepthTitle: "Combien de dernières répliques sont lues pour chercher les mots-clés",
+      tokenBudget: "Budget (jetons)",
+      tokenBudgetTitle: "Place maximale des connaissances dans le prompt",
+      unsupported:
+        "Réglages SillyTavern conservés pour l’export mais sans effet ici (regex, probabilité…).",
+      deleteEntry: "Supprimer l’entrée",
+    },
     pickStartingPoint: "Choisir un point de départ",
     everythingEditable: "Tout reste modifiable après la création.",
     blankSheet: "Fiche vierge",

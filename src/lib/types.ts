@@ -1,9 +1,11 @@
 // Types du domaine — contrat fonctionnel de l'application.
 
 import type { AvatarAppearance } from "./services/avatar";
+import type { Lorebook } from "./services/lorebook";
 import type { Locale } from "./i18n/locales";
 
 export type { AvatarAppearance };
+export type { Lorebook };
 export type { Locale };
 
 /**
@@ -44,6 +46,11 @@ export type Persona = {
    * réglage ne se ressemblent pas.
    */
   avatarStyle: AvatarAppearance | null;
+  /**
+   * Connaissances du personnage (lorebook) : des entrées rappelées quand
+   * leurs mots-clés reviennent dans la scène. null = aucune.
+   */
+  lorebook: Lorebook | null;
   createdAt: string;
   updatedAt: string;
 };

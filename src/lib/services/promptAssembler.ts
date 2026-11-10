@@ -12,6 +12,7 @@ import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
 import { sheetLanguageDiffers } from "./language";
+import { NO_LORE, selectLore, type LoreSelection } from "./lorebook";
 import { publicText, recentGestures } from "./messageFormat";
 import { rankByRelevance, recallPassages, type RecallDocument } from "./recall";
 import {
@@ -131,6 +132,8 @@ export type AssembledPrompt = {
   /** Faits du registre effectivement transmis. */
   factCount: number;
   recalledPassageCount: number;
+  /** Entrées du lorebook transmises (permanentes et évoquées). */
+  loreEntryCount: number;
   estimatedTokens: number;
   error: string | null;
 };
@@ -152,6 +155,7 @@ export type AssembledPrompt = {
 function buildSystemPrompt(
   input: AssembleInput,
   memoryBlocks: string[],
+  lore: LoreSelection = NO_LORE,
 ): string {
   const { persona } = input;
   const pack = input.pack ?? DEFAULT_PROMPT_PACK;
@@ -179,6 +183,12 @@ function buildSystemPrompt(
 
   if (persona.stableTraits.length > 0) {
     parts.push(a.stableTraits(persona.stableTraits));
+  }
+
+  // Les connaissances permanentes font partie de qui il est : elles restent
+  // dans le préfixe stable, avec la fiche.
+  if (lore.constant.length > 0) {
+    parts.push(a.knowledge(lore.constant));
   }
 
   const lengthInstruction = responseLengthInstruction(persona.maxOutputTokens, pack);
@@ -244,7 +254,7 @@ function buildSystemPrompt(
  * Tout ce qui change à chaque requête, transmis après l'historique pour ne
  * pas invalider le cache d'attention des messages qui précèdent.
  */
-function buildVolatileBlock(input: AssembleInput): string {
+function buildVolatileBlock(input: AssembleInput, lore: LoreSelection = NO_LORE): string {
   const { state, immediateReaction, temporal, scene } = input;
   const pack = input.pack ?? DEFAULT_PROMPT_PACK;
   const a = pack.assembler;
@@ -294,6 +304,12 @@ function buildVolatileBlock(input: AssembleInput): string {
     volatileParts.push(a.asideNudge());
   }
 
+  // Ce que la scène vient d'évoquer change à chaque tour : sa place est ici,
+  // pas dans le préfixe, sous peine d'invalider le cache de tout l'historique.
+  if (lore.triggered.length > 0) {
+    volatileParts.push(a.recalledKnowledge(lore.triggered));
+  }
+
   // Les petits modèles suivent parfois mieux les faits proches de la
   // génération que les mêmes faits placés tôt dans le système. La situation
   // reste dans le préfixe stable, mais ce rappel l'ancre aussi au moment exact
@@ -337,6 +353,18 @@ function buildVolatileBlock(input: AssembleInput): string {
   }
 
   return volatileParts.join("\n\n");
+}
+
+/**
+ * Ce que le personnage a entendu récemment, où chercher les mots-clés de son
+ * lorebook. Les apartés des autres ne lui parviennent pas ; les siens, si.
+ */
+function loreScanTexts(input: AssembleInput): string[] {
+  const speakerId = input.scene?.speakerId ?? input.persona.id;
+  return input.recentMessages
+    .filter((m) => m.status !== "error")
+    .map((m) => (m.personaId === speakerId ? m.content : publicText(m.content)))
+    .filter((text) => text.trim().length > 0);
 }
 
 /** Requête de rappel : les dernières répliques, la plus récente pesant le plus. */
@@ -419,7 +447,13 @@ function buildMemoryBlocks(
  */
 export function assemblePrompt(input: AssembleInput): AssembledPrompt {
   const pack = input.pack ?? DEFAULT_PROMPT_PACK;
-  const volatileBlock = buildVolatileBlock(input);
+  const lore = selectLore(
+    input.persona.lorebook,
+    loreScanTexts(input),
+    input.contextTokens,
+    estimateTokens,
+  );
+  const volatileBlock = buildVolatileBlock(input, lore);
 
   const usable = input.recentMessages.filter(
     (m) => m.content.trim().length > 0 && m.status !== "error",
@@ -466,8 +500,8 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
     Math.floor(input.contextTokens * MEMORY_FACTS_CONTEXT_RATIO),
     pack,
   );
-  const withMemory = buildSystemPrompt(input, memory.blocks);
-  const withoutMemory = buildSystemPrompt(input, []);
+  const withMemory = buildSystemPrompt(input, memory.blocks, lore);
+  const withoutMemory = buildSystemPrompt(input, [], lore);
 
   let system = withMemory;
   let memoryIncluded = memory.blocks.length > 0;
@@ -486,6 +520,7 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
         memoryIncluded: false,
         factCount: 0,
         recalledPassageCount: 0,
+        loreEntryCount: 0,
         estimatedTokens: estimateTokens(withoutMemory) + lastTokens,
         error: pack.assembler.contextTooLong,
       };
@@ -563,6 +598,7 @@ export function assemblePrompt(input: AssembleInput): AssembledPrompt {
     memoryIncluded,
     factCount,
     recalledPassageCount: passages.length,
+    loreEntryCount: lore.constant.length + lore.triggered.length,
     estimatedTokens: used,
     error: null,
   };

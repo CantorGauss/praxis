@@ -99,6 +99,7 @@ const persona: Persona = {
   gender: "feminine",
   avatarSetId: null,
   avatarStyle: null,
+  lorebook: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-02T00:00:00.000Z",
 };
@@ -207,6 +208,7 @@ describe("cardToPersona", () => {
       topP: null,
       maxOutputTokens: null,
       appearance: null,
+      lorebook: null,
     });
   });
 
@@ -278,7 +280,61 @@ describe("export vers SillyTavern", () => {
       topP: 0.9,
       maxOutputTokens: 300,
       appearance: null,
+      lorebook: null,
     });
+  });
+
+  it("emporte le lorebook dans la carte et le relit au retour", () => {
+    const withLore: Persona = {
+      ...persona,
+      lorebook: {
+        version: 1,
+        name: "Commissariat",
+        description: "",
+        scanDepth: 3,
+        tokenBudget: null,
+        extra: { recursive_scanning: true },
+        entries: [
+          {
+            id: "a",
+            comment: "Le dossier",
+            keys: ["dossier Morel"],
+            secondaryKeys: [],
+            selective: false,
+            secondaryLogic: "andAny",
+            content: "Hélène n'a jamais classé le dossier Morel.",
+            constant: false,
+            enabled: true,
+            caseSensitive: false,
+            insertionOrder: 50,
+            extra: { extensions: { probability: 80 } },
+          },
+        ],
+      },
+    };
+    const v2 = personaToCardV2(withLore);
+    const book = v2.data.character_book as { entries: Record<string, unknown>[] };
+    expect(book.entries[0]).toMatchObject({
+      keys: ["dossier Morel"],
+      content: "Hélène n'a jamais classé le dossier Morel.",
+      insertion_order: 50,
+      extensions: { probability: 80, selectiveLogic: 0 },
+    });
+    expect(personaToCardV3(withLore).data.character_book).toEqual(book);
+    const back = cardToPersona(normalizeCard(v2)!, "Jeff")!.lorebook!;
+    expect(back.name).toBe("Commissariat");
+    expect(back.scanDepth).toBe(3);
+    expect(back.extra).toEqual({ recursive_scanning: true, extensions: {} });
+    expect(back.entries[0]).toMatchObject({
+      comment: "Le dossier",
+      keys: ["dossier Morel"],
+      insertionOrder: 50,
+      extra: { extensions: { probability: 80, selectiveLogic: 0 } },
+    });
+  });
+
+  it("n'écrit pas de lorebook vide", () => {
+    expect(personaToCardV2(persona).data).not.toHaveProperty("character_book");
   });
 
   it("préfère le texte modifié dans SillyTavern à l'ancien caractère", () => {
