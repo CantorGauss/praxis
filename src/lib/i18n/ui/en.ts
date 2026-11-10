@@ -168,6 +168,15 @@ export const enUi = {
       `${count} character${count > 1 ? "s" : ""} added.`,
     nothingImportable: "No usable character in that file.",
     exportFileName: "cast.json",
+    importTitle:
+      "Add characters from a Praxis cast or from SillyTavern character cards (PNG or JSON)",
+    importFilter: "Characters",
+    unreadableFile: (file: string) =>
+      `${file}: neither a Praxis cast nor a character card.`,
+    exportCard: "Export card",
+    exportCardTitle:
+      "Save as a SillyTavern character card: a PNG with the portrait, or JSON",
+    cardExported: (name: string) => `${name} saved as a character card.`,
     pickStartingPoint: "Pick a starting point",
     everythingEditable: "Everything stays editable after creation.",
     blankSheet: "Blank sheet",

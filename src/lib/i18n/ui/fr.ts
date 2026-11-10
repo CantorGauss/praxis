@@ -167,6 +167,15 @@ export const frUi: UiStrings = {
       `${count} personnage${count > 1 ? "s ajoutés" : " ajouté"}.`,
     nothingImportable: "Aucun personnage exploitable dans ce fichier.",
     exportFileName: "distribution.json",
+    importTitle:
+      "Ajouter des personnages depuis une distribution Praxis ou des cartes de personnage SillyTavern (PNG ou JSON)",
+    importFilter: "Personnages",
+    unreadableFile: (file: string) =>
+      `${file} : ni une distribution Praxis, ni une carte de personnage.`,
+    exportCard: "Exporter la carte",
+    exportCardTitle:
+      "Enregistrer en carte de personnage SillyTavern : un PNG avec le portrait, ou du JSON",
+    cardExported: (name: string) => `Carte de personnage de ${name} enregistrée.`,
     pickStartingPoint: "Choisir un point de départ",
     everythingEditable: "Tout reste modifiable après la création.",
     blankSheet: "Fiche vierge",

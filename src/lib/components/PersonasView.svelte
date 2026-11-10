@@ -1,12 +1,29 @@
 <script lang="ts">
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
-  import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+  import { readFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import { app } from "../state/appState.svelte";
   import {
+    clearImportedAvatars,
+    createPersonaFromCard,
     exportPersonas,
+    importedPortraits,
     importPersonas,
     personaRepo,
+    readAvatarFile,
   } from "../services/repositories";
+  import {
+    cardFileName,
+    cardToPersona,
+    isPng,
+    normalizeCard,
+    personaToCardV2,
+    personaToCardV3,
+    readCardFromPng,
+    writeCardToPng,
+    type CharacterCardData,
+  } from "../services/characterCard";
+  import { asPng, imageToPng } from "../services/cardImage";
   import type { Gender, Persona } from "../types";
   import {
     appearanceFromSeed,
@@ -43,6 +60,18 @@
   const selectedPersona = $derived(
     app.personaById(selectedId),
   );
+  /** Images importées (cartes SillyTavern), par personnage ; elles priment sur le portrait intégré. */
+  let imported = $state<Record<string, string>>({});
+
+  async function reloadImported() {
+    imported = await importedPortraits();
+  }
+
+  $effect(() => {
+    // Relu à chaque changement de la distribution (import, suppression…).
+    void app.personas;
+    void reloadImported();
+  });
 
   $effect(() => {
     if (app.personas.length > 0 && !selectedPersona) {
@@ -144,14 +173,25 @@
     if (selectedId === id) selectedId = app.personas[0]?.id ?? null;
   }
 
-  function portraitOf(p: Persona) {
+  function builtinPortraitOf(p: Persona) {
     return builtinAvatarImage(
       p.avatarStyle ?? appearanceFromSeed(p.id),
       p.gender,
     );
   }
 
+  function portraitOf(p: Persona): string {
+    const path = imported[p.id];
+    return path ? convertFileSrc(path) : builtinPortraitOf(p);
+  }
+
   async function choosePortrait(p: Persona, portrait: number) {
+    // Un portrait intégré choisi à la main remplace l'image de la carte.
+    if (imported[p.id]) {
+      await clearImportedAvatars(p);
+      await reloadImported();
+      await app.refreshEmotionalState();
+    }
     const current = p.avatarStyle ?? appearanceFromSeed(p.id);
     await patch(p, {
       avatarStyle: {
@@ -163,7 +203,8 @@
   }
 
   function portraitIndexOf(p: Persona): number {
-    return BUILTIN_AVATAR_IMAGES.indexOf(portraitOf(p));
+    if (imported[p.id]) return -1;
+    return BUILTIN_AVATAR_IMAGES.indexOf(builtinPortraitOf(p));
   }
 
   async function doExport() {
@@ -177,19 +218,116 @@
     dataMessage = s.personas.exported(app.personas.length);
   }
 
+  function fileNameOf(path: string): string {
+    return path.split(/[\\/]/).pop() ?? path;
+  }
+
+  async function importCard(
+    card: CharacterCardData,
+    imagePath: string | null,
+  ): Promise<string | null> {
+    const draft = cardToPersona(card, app.userName);
+    if (!draft) return null;
+    const persona = await createPersonaFromCard(draft, imagePath);
+    return persona.id;
+  }
+
+  /**
+   * Un fichier peut être une carte PNG, une carte JSON ou une distribution
+   * Praxis : on le reconnaît à son contenu, pas à son extension. Retourne les
+   * personnages créés (leurs identifiants quand on les connaît).
+   */
+  async function importFile(path: string): Promise<{ count: number; lastId: string | null }> {
+    const bytes = await readFile(path);
+    if (isPng(bytes)) {
+      const card = readCardFromPng(bytes);
+      if (!card) throw new Error(s.personas.unreadableFile(fileNameOf(path)));
+      const id = await importCard(card, path);
+      return { count: id ? 1 : 0, lastId: id };
+    }
+    const text = new TextDecoder().decode(bytes).replace(/^\uFEFF/, "");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error(s.personas.unreadableFile(fileNameOf(path)));
+    }
+    const card = normalizeCard(parsed);
+    if (card) {
+      const id = await importCard(card, null);
+      return { count: id ? 1 : 0, lastId: id };
+    }
+    try {
+      return { count: await importPersonas(text), lastId: null };
+    } catch {
+      throw new Error(s.personas.unreadableFile(fileNameOf(path)));
+    }
+  }
+
   async function doImport() {
     dataMessage = null;
-    const path = await openDialog({
-      multiple: false,
-      filters: [{ name: "JSON", extensions: ["json"] }],
+    const picked = await openDialog({
+      multiple: true,
+      filters: [{ name: s.personas.importFilter, extensions: ["json", "png"] }],
     });
-    if (!path || Array.isArray(path)) return;
+    if (!picked) return;
+    const paths = Array.isArray(picked) ? picked : [picked];
+    let count = 0;
+    let lastId: string | null = null;
+    const errors: string[] = [];
+    for (const path of paths) {
+      try {
+        const result = await importFile(path);
+        count += result.count;
+        lastId = result.lastId ?? lastId;
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+    await app.reloadPersonas();
+    await app.refreshEmotionalState();
+    await reloadImported();
+    if (lastId) selectedId = lastId;
+    const summary =
+      count > 0 ? s.personas.imported(count) : errors.length ? "" : s.personas.nothingImportable;
+    dataMessage = [summary, ...errors].filter(Boolean).join(" ");
+  }
+
+  /** Portrait du personnage en PNG : l'image importée s'il en a une, sinon le portrait intégré. */
+  async function portraitPng(p: Persona): Promise<Uint8Array> {
+    const path = imported[p.id];
+    if (path) {
+      try {
+        return await asPng(await readAvatarFile(path));
+      } catch {
+        // Image importée disparue : le portrait intégré fera l'affaire.
+      }
+    }
+    return imageToPng(builtinPortraitOf(p));
+  }
+
+  async function doExportCard(p: Persona) {
+    dataMessage = null;
+    const path = await saveDialog({
+      defaultPath: cardFileName(p.name, "png"),
+      filters: [
+        { name: "PNG", extensions: ["png"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+    if (!path) return;
     try {
-      const count = await importPersonas(await readTextFile(path));
-      await app.reloadPersonas();
-      await app.refreshEmotionalState();
-      dataMessage =
-        count > 0 ? s.personas.imported(count) : s.personas.nothingImportable;
+      if (/\.json$/i.test(path)) {
+        await writeTextFile(path, JSON.stringify(personaToCardV2(p), null, 2));
+      } else {
+        const png = writeCardToPng(
+          await portraitPng(p),
+          personaToCardV2(p),
+          personaToCardV3(p),
+        );
+        await writeFile(path, png);
+      }
+      dataMessage = s.personas.cardExported(p.name);
     } catch (e) {
       dataMessage = String(e);
     }
@@ -203,7 +341,9 @@
       <p class="panel-sub">{s.personas.subtitle}</p>
     </div>
     <div class="header-actions">
-      <button class="btn" onclick={() => void doImport()}>{s.personas.import}</button>
+      <button class="btn" title={s.personas.importTitle} onclick={() => void doImport()}>
+        {s.personas.import}
+      </button>
       <button
         class="btn"
         disabled={app.personas.length === 0}
@@ -368,6 +508,9 @@
             title={s.personas.responseStyleTitle}
           >
             <span aria-hidden="true">🎚️</span> {showAdvanced ? s.personas.closeSettings : s.personas.responseStyle}
+          </button>
+          <button onclick={() => void doExportCard(p)} title={s.personas.exportCardTitle}>
+            <span aria-hidden="true">🃏</span> {s.personas.exportCard}
           </button>
           <button class="danger-link" onclick={() => void askDelete(p)}>
             <span aria-hidden="true">🗑️</span> {s.common.delete}

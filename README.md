@@ -33,6 +33,8 @@ your disk. No account, no telemetry.
   awards.
 - **English or French**, for the interface and for the characters,
   independently.
+- **SillyTavern character cards.** Import cards (PNG or JSON, V1 to V3) with
+  their portrait, and export any character as a card, ready for SillyTavern.
 
 ![A character sheet: portrait, pronouns, and the prompt in plain words](docs/screenshots/characters-sheet.png)
 
