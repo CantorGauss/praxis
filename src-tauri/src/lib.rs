@@ -503,7 +503,8 @@ async fn read_avatar(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::
     if !canonical_target.starts_with(&canonical_dir) {
         return Err("Path outside the application directory.".into());
     }
-    let bytes = std::fs::read(&canonical_target).map_err(|e| format!("Lecture impossible : {e}"))?;
+    let bytes =
+        std::fs::read(&canonical_target).map_err(|e| format!("Lecture impossible : {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
