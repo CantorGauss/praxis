@@ -26,6 +26,7 @@ import { decodeInteraction } from "./coordination";
 import type { PresenceSpan } from "./presence";
 import { decodeMemory } from "./memory";
 import { decodeObjectives, encodeObjectives } from "./objectives";
+import type { CardPersonaDraft } from "./characterCard";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -1186,6 +1187,75 @@ export async function importPersonas(json: string): Promise<number> {
     created += 1;
   }
   return created;
+}
+
+/**
+ * Crée un personnage à partir d'une carte SillyTavern déjà traduite. L'image
+ * de la carte, si elle est fournie (chemin d'un fichier choisi par
+ * l'utilisateur), devient son portrait.
+ */
+export async function createPersonaFromCard(
+  draft: CardPersonaDraft,
+  imagePath: string | null,
+): Promise<Persona> {
+  const seed = newId();
+  const persona = await personaRepo.create({
+    name: draft.name,
+    description: draft.description,
+    systemPrompt: draft.systemPrompt,
+    stableTraits: draft.stableTraits,
+    defaultModelId: null,
+    temperature:
+      draft.temperature !== null ? Math.min(Math.max(draft.temperature, 0), 2) : 0.7,
+    topP: draft.topP,
+    maxOutputTokens:
+      draft.maxOutputTokens !== null && draft.maxOutputTokens > 0
+        ? Math.round(draft.maxOutputTokens)
+        : DEFAULT_MAX_OUTPUT_TOKENS,
+    gender: draft.gender,
+    avatarSetId: null,
+    avatarStyle: normalizeAppearance(draft.appearance, seed),
+  });
+  if (imagePath) {
+    try {
+      const asset = await importAvatarFile(imagePath);
+      const setId = await avatarRepo.ensureSet(persona);
+      await avatarRepo.setVariant(setId, null, null, asset);
+    } catch {
+      // Image refusée (trop lourde, illisible) : le personnage garde un
+      // portrait intégré plutôt que de ne pas être importé du tout.
+    }
+  }
+  return persona;
+}
+
+/**
+ * Portrait importé de chaque personnage qui en a un (image neutre, sans
+ * humeur ni moment de la journée), indexé par identifiant de personnage.
+ */
+export async function importedPortraits(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = await db.select<{ persona_id: string; asset_path: string }[]>(
+    `SELECT p.id AS persona_id, v.asset_path
+       FROM personas p
+       JOIN avatar_variants v ON v.avatar_set_id = p.avatar_set_id
+      WHERE v.mood IS NULL AND v.day_period IS NULL`,
+  );
+  return Object.fromEntries(rows.map((r) => [r.persona_id, r.asset_path]));
+}
+
+/** Lit une image importée ; Rust refuse tout chemin hors du dossier applicatif. */
+export async function readAvatarFile(path: string): Promise<Uint8Array> {
+  const buffer = await invoke<ArrayBuffer>("read_avatar", { path });
+  return new Uint8Array(buffer);
+}
+
+/** Retire toutes les images importées d'un personnage : le portrait intégré reprend la main. */
+export async function clearImportedAvatars(persona: Persona): Promise<void> {
+  if (!persona.avatarSetId) return;
+  for (const variant of await avatarRepo.variants(persona.avatarSetId)) {
+    await avatarRepo.removeVariant(variant.id);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -168,6 +168,25 @@ export const enUi = {
       `${count} character${count > 1 ? "s" : ""} added.`,
     nothingImportable: "No usable character in that file.",
     exportFileName: "cast.json",
+    importTitle:
+      "Add characters from a Praxis cast or from SillyTavern character cards (PNG or JSON)",
+    importFilter: "Characters",
+    unreadableFile: (file: string) =>
+      `${file}: neither a Praxis cast nor a character card.`,
+    exportCard: "Export card",
+    exportCardTitle:
+      "Save as a SillyTavern character card: a PNG with the portrait, or JSON",
+    cardExported: (name: string) => `${name} saved as a character card.`,
+    languageNames: { en: "English", fr: "French" },
+    sheetInOtherLanguage: (sheet: string, conversation: string) =>
+      `This sheet is written in ${sheet} and conversations are in ` +
+      `${conversation}. The character will still speak ${conversation}.`,
+    translateSheet: (language: string) => `Translate into ${language}`,
+    translating: "Translating…",
+    translated: "Sheet translated. Read it over: everything stays editable.",
+    restoreOriginal: "Restore the original",
+    translationFailed:
+      "The model returned nothing usable. The sheet is unchanged.",
     pickStartingPoint: "Pick a starting point",
     everythingEditable: "Everything stays editable after creation.",
     blankSheet: "Blank sheet",

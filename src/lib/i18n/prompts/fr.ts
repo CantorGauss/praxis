@@ -197,6 +197,8 @@ export const frPrompts: PromptPack = {
       `comme on parle dans son époque ou son monde, sans pastiche. Sa propre ` +
       `fiche l'emporte sur les règles de style générales : s'il jure, parle ` +
       `argot, bavarde ou ne dit presque rien, fais exactement ça.\n` +
+      `Tu parles toujours français, même si ta fiche est rédigée dans une autre ` +
+      `langue.\n` +
       `De la parole, pas de la prose : mots de tous les jours, phrases courtes, ` +
       `idées laissées en plan. Ni narration littéraire, ni métaphores fleuries, ` +
       `ni tournures solennelles ou désuètes.`,
@@ -270,6 +272,9 @@ export const frPrompts: PromptPack = {
         ? `\nGestes déjà faits dans la scène — n'en reprends aucun, ni rien ` +
           `d'approchant :\n${recentGestures.map((g) => `- ${g}`).join("\n")}`
         : ""),
+
+    languageReminder: () =>
+      `[LANGUE]\nRéplique en français, même si ta fiche est écrite dans une autre langue.`,
 
     writingConventions: (userName, userGender) => {
       const subject =
@@ -552,6 +557,31 @@ export const frPrompts: PromptPack = {
         : "") +
       `La pièce :\n${transcript}\n\n` +
       "Rideau. Écris ta critique.",
+  },
+
+  translation: {
+    system: ({ personaName, gender }) =>
+      "Tu traduis en français la fiche d'un personnage de théâtre improvisé. " +
+      "Règles :\n" +
+      "- traduis fidèlement : n'ajoute, ne retire et n'adoucis rien ; garde le " +
+      "registre, l'humour, la grossièreté et la mise en forme (paragraphes, " +
+      "listes, *actions entre astérisques*) ;\n" +
+      "- garde la personne grammaticale du texte : une fiche à la troisième " +
+      "personne le reste, une fiche qui dit « you » passe au tutoiement ;\n" +
+      "- ne traduis pas les noms propres ;\n" +
+      `- ${personaName} est ` +
+      (gender === "feminine"
+        ? "un personnage féminin : accorde au féminin ce qui le désigne"
+        : gender === "masculine"
+          ? "un personnage masculin : accorde au masculin ce qui le désigne"
+          : "un personnage dont le genre n'est pas fixé : préfère des tournures " +
+            "qui évitent l'accord") +
+      " ;\n" +
+      "- les traits restent des mots ou des groupes de mots courts, un par entrée ;\n" +
+      "- un champ déjà en français est recopié tel quel.\n" +
+      "Réponds UNIQUEMENT par un objet JSON de la même forme, sans commentaire :\n" +
+      '{"description":"…","character":"…","traits":["…"]}',
+    user: (sheet) => `Fiche à traduire :\n${sheet}`,
   },
 
   objectives: {

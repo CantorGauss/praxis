@@ -490,6 +490,24 @@ async fn remove_avatar(app: tauri::AppHandle, path: String) -> Result<(), String
     Ok(())
 }
 
+/// Lit une image importée, pour l'embarquer dans une carte exportée. Refuse
+/// tout chemin hors du dossier applicatif : l'interface ne lit pas le disque
+/// à sa guise.
+#[tauri::command]
+async fn read_avatar(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let dir = avatars_dir(&app)?;
+    let canonical_dir = dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_target = std::path::PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|_| "Fichier introuvable.".to_string())?;
+    if !canonical_target.starts_with(&canonical_dir) {
+        return Err("Path outside the application directory.".into());
+    }
+    let bytes =
+        std::fs::read(&canonical_target).map_err(|e| format!("Lecture impossible : {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Journalise une erreur venue de l'interface. Une application de bureau n'a
 /// pas de console : sans cela, un échec au démarrage n'affiche qu'un message
 /// à l'écran, impossible à rapporter ou à diagnostiquer après coup.
@@ -951,6 +969,7 @@ pub fn run() {
             get_api_key,
             import_avatar,
             remove_avatar,
+            read_avatar,
             import_backup,
             log_client_error
         ])

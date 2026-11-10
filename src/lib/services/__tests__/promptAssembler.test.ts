@@ -424,6 +424,23 @@ describe("assemblePrompt : voix des personnages", () => {
 });
 
 describe("assemblePrompt selon la langue de jeu", () => {
+  it("impose la langue de jeu, quelle que soit celle de la fiche", () => {
+    expect(assemblePrompt(baseInput()).system).toContain("Tu parles toujours français");
+    expect(assemblePrompt(baseInput({ pack: enPrompts })).system).toContain(
+      "Always speak English",
+    );
+  });
+
+  it("rappelle la langue en fin de requête pour une fiche écrite dans une autre", () => {
+    const english = persona({
+      systemPrompt: "She is a retired detective. She notices everything and never forgets a face.",
+    });
+    const tail = (input: AssembleInput) => assemblePrompt(input).messages.at(-1)!.content;
+    expect(tail(baseInput({ persona: english }))).toContain("[LANGUE]");
+    expect(tail(baseInput())).not.toContain("[LANGUE]");
+    expect(assemblePrompt(baseInput({ persona: english })).system).not.toContain("[LANGUE]");
+  });
+
   it("intitule les sections dans la langue du pack", () => {
     const result = assemblePrompt(baseInput({ pack: enPrompts }));
     expect(result.system).toContain("[IDENTITY]");
