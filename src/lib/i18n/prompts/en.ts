@@ -198,6 +198,8 @@ export const enPrompts: PromptPack = {
       `people talk in their era or world, without pastiche. Your character's own ` +
       `description outranks the general style rules: if they swear, ramble, use ` +
       `slang or barely speak, do exactly that.\n` +
+      `Always speak English, even if your description is written in another ` +
+      `language.\n` +
       `Speech, not prose: everyday words, short sentences, thoughts left hanging. ` +
       `No literary narration, flowery metaphors, or solemn, old-fashioned phrasing.`,
 
@@ -269,6 +271,9 @@ export const enPrompts: PromptPack = {
         ? `\nGestures just made in the scene — do not repeat any of them, or ` +
           `anything close:\n${recentGestures.map((g) => `- ${g}`).join("\n")}`
         : ""),
+
+    languageReminder: () =>
+      `[LANGUAGE]\nReply in English, even if your description is written in another language.`,
 
     writingConventions: (userName, userGender) => {
       const subject =
@@ -546,6 +551,30 @@ export const enPrompts: PromptPack = {
         : "") +
       `The play:\n${transcript}\n\n` +
       "Curtain. Write your review.",
+  },
+
+  translation: {
+    system: ({ personaName, gender }) =>
+      "You translate into English the description of a character from an " +
+      "improvised play. Rules:\n" +
+      "- translate faithfully: add, remove and soften nothing; keep the " +
+      "register, the humour, the swearing and the layout (paragraphs, lists, " +
+      "*actions between asterisks*);\n" +
+      "- keep the grammatical person of the text: a third-person description " +
+      "stays in the third person, one written as « tu » or « vous » becomes « you »;\n" +
+      "- do not translate proper names;\n" +
+      `- ${personaName} goes by ` +
+      (gender === "feminine"
+        ? "she/her"
+        : gender === "masculine"
+          ? "he/him"
+          : "they/them") +
+      ";\n" +
+      "- traits stay single words or short phrases, one per entry;\n" +
+      "- a field already in English is copied unchanged.\n" +
+      "Reply ONLY with a JSON object of the same shape, no commentary:\n" +
+      '{"description":"…","character":"…","traits":["…"]}',
+    user: (sheet) => `Description to translate:\n${sheet}`,
   },
 
   objectives: {

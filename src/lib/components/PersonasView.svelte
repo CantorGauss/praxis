@@ -24,6 +24,7 @@
     type CharacterCardData,
   } from "../services/characterCard";
   import { asPng, imageToPng } from "../services/cardImage";
+  import { sheetLanguageDiffers } from "../services/language";
   import type { Gender, Persona } from "../types";
   import {
     appearanceFromSeed,
@@ -60,6 +61,14 @@
   const selectedPersona = $derived(
     app.personaById(selectedId),
   );
+  /** Traduction en cours, et de quoi revenir sur la dernière. */
+  let translatingId = $state<string | null>(null);
+  let translationError = $state<{ personaId: string; message: string } | null>(null);
+  let lastTranslation = $state<{
+    personaId: string;
+    before: Pick<Persona, "description" | "systemPrompt" | "stableTraits">;
+  } | null>(null);
+
   /** Images importées (cartes SillyTavern), par personnage ; elles priment sur le portrait intégré. */
   let imported = $state<Record<string, string>>({});
 
@@ -216,6 +225,39 @@
     if (!path) return;
     await writeTextFile(path, await exportPersonas());
     dataMessage = s.personas.exported(app.personas.length);
+  }
+
+  async function translateSheet(p: Persona) {
+    translatingId = p.id;
+    translationError = null;
+    try {
+      const sheet = await app.translatePersona(p);
+      // Relu après l'appel : un champ a pu être corrigé pendant la traduction.
+      const latest = app.personaById(p.id) ?? p;
+      lastTranslation = {
+        personaId: p.id,
+        before: {
+          description: latest.description,
+          systemPrompt: latest.systemPrompt,
+          stableTraits: [...latest.stableTraits],
+        },
+      };
+      await patch(latest, sheet);
+    } catch (e) {
+      translationError = {
+        personaId: p.id,
+        message: e instanceof Error ? e.message : String(e),
+      };
+    } finally {
+      translatingId = null;
+    }
+  }
+
+  async function restoreOriginal(p: Persona) {
+    if (lastTranslation?.personaId !== p.id) return;
+    const before = lastTranslation.before;
+    lastTranslation = null;
+    await patch(app.personaById(p.id) ?? p, before);
   }
 
   function fileNameOf(path: string): string {
@@ -458,6 +500,8 @@
 
       {#if selectedPersona}
         {@const p = selectedPersona}
+        {@const sheetLanguage = sheetLanguageDiffers(p, app.settings.conversationLanguage)}
+        {@const playLanguage = s.personas.languageNames[app.settings.conversationLanguage]}
         <article class="card" style={`--persona-accent: ${personaAccent(p.id)}`}>
       <div class="card-head">
         <img class="portrait" src={portraitOf(p)} alt={s.personas.portraitOf(p.name)} />
@@ -517,6 +561,33 @@
           </button>
         </div>
       </div>
+
+      {#if lastTranslation?.personaId === p.id}
+        <div class="language-note">
+          <span>{s.personas.translated}</span>
+          <button class="btn" onclick={() => void restoreOriginal(p)}>
+            {s.personas.restoreOriginal}
+          </button>
+        </div>
+      {:else if sheetLanguage || translatingId === p.id}
+        <div class="language-note">
+          <span>
+            {#if sheetLanguage}
+              {s.personas.sheetInOtherLanguage(s.personas.languageNames[sheetLanguage], playLanguage)}
+            {/if}
+            {#if translationError?.personaId === p.id}
+              <em class="language-error">{translationError.message}</em>
+            {/if}
+          </span>
+          <button
+            class="btn primary"
+            disabled={translatingId !== null}
+            onclick={() => void translateSheet(p)}
+          >
+            {translatingId === p.id ? s.personas.translating : s.personas.translateSheet(playLanguage)}
+          </button>
+        </div>
+      {/if}
 
       {#if showAvatarPicker}
         <section class="avatar-picker" aria-label={s.personas.choosePortrait}>
@@ -659,6 +730,31 @@
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  .language-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+    font-size: 12.5px;
+    color: var(--text-soft);
+  }
+
+  .language-note .btn {
+    flex-shrink: 0;
+  }
+
+  .language-error {
+    display: block;
+    margin-top: 4px;
+    color: var(--danger, var(--accent));
+    font-style: normal;
   }
 
   .data-msg {

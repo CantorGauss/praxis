@@ -20,6 +20,7 @@ export type PromptPack = {
   twist: TwistPrompts;
   review: ReviewPrompts;
   objectives: ObjectivePrompts;
+  translation: TranslationPrompts;
   coordination: {
     analysisSystem: string;
     context(data: string): string;
@@ -126,6 +127,12 @@ export type AssemblerPrompts = {
   identityReminder(personaName: string, description: string): string;
   /** Rappel de style juste avant la réplique : les consignes de forme s'oublient vite. */
   voiceReminder(recentGestures: string[]): string;
+  /**
+   * Rappel de la langue de jeu, en fin de requête, quand la fiche du
+   * personnage est écrite dans une autre langue : sans lui, un petit modèle
+   * glisse vers la langue de la fiche.
+   */
+  languageReminder(): string;
   writingConventions(userName: string, userGender: Gender): string;
   /** Règle des apartés, en scène de groupe : dits au public, entendus de personne. */
   asides(): string;
@@ -262,6 +269,14 @@ export type ObjectivePrompts = {
   assignedLine(name: string, goal: string): string;
   /** Une ligne « ce que chacun veut », pour l'imprévu et la critique. */
   goalLine(name: string, goal: string, secret: string | null): string;
+};
+
+/** Traduction d'une fiche de personnage vers la langue de jeu. */
+export type TranslationPrompts = {
+  /** Consigne : traduire fidèlement, répondre en JSON. */
+  system(input: { personaName: string; gender: Gender }): string;
+  /** La fiche à traduire, déjà mise en JSON. */
+  user(sheet: string): string;
 };
 
 export type MemoryPrompts = {

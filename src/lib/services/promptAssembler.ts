@@ -11,6 +11,7 @@ import { DEFAULT_PROMPT_PACK, type PromptPack } from "../i18n/prompts";
 import type { StagnationReason } from "../i18n/prompts/types";
 import type { ChatMessage } from "./llmClient";
 import { responseLengthInstruction } from "./inference";
+import { sheetLanguageDiffers } from "./language";
 import { publicText, recentGestures } from "./messageFormat";
 import { rankByRelevance, recallPassages, type RecallDocument } from "./recall";
 import {
@@ -320,6 +321,12 @@ function buildVolatileBlock(input: AssembleInput): string {
   // chaque réplique finissait par s'ouvrir sur une longue didascalie de
   // clichés (« mon cœur cognant dans ma poitrine »).
   volatileParts.push(a.voiceReminder(recentGestures(input.recentMessages)));
+
+  // Une fiche importée dans une autre langue tire le personnage vers elle :
+  // la consigne du haut ne suffit pas toujours, on la redit à la fin.
+  if (sheetLanguageDiffers(input.persona, pack.locale)) {
+    volatileParts.push(a.languageReminder());
+  }
 
   // Même raison pour la fiche : une fois que le personnage s'est contredit
   // (« on se connaît depuis deux mois ? »), ses propres répliques pèsent plus
