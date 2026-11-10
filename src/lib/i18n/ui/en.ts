@@ -187,6 +187,44 @@ export const enUi = {
     restoreOriginal: "Restore the original",
     translationFailed:
       "The model returned nothing usable. The sheet is unchanged.",
+    untranslatedEntries: (count: number) =>
+      count > 1
+        ? `${count} knowledge entries could not be translated and stay in their original language.`
+        : "One knowledge entry could not be translated and stays in its original language.",
+    lore: {
+      button: (count: number) => (count > 0 ? `Knowledge (${count})` : "Knowledge"),
+      buttonTitle: "What the character knows about their world (SillyTavern lorebook)",
+      title: "Knowledge",
+      hint:
+        "What the character knows about their world. An entry comes back to " +
+        "them when one of its keywords appears in the latest lines; “Always” " +
+        "keeps it in mind for good. The other characters know none of it.",
+      add: "+ Entry",
+      empty:
+        "No knowledge yet. Imported SillyTavern cards bring their own lorebook.",
+      filter: "Filter entries",
+      commentPlaceholder: "Title, to find it again",
+      keysPlaceholder: "Keywords, separated by commas",
+      keysUnused: "Always present: keywords are not needed.",
+      contentPlaceholder: "What the character knows, in a few sentences",
+      constant: "Always",
+      enabled: "Active",
+      condition: "Condition",
+      secondaryPlaceholder: "Secondary keywords",
+      logic: {
+        andAny: "and any of",
+        andAll: "and all of",
+        notAny: "but none of",
+        notAll: "but not all of",
+      },
+      scanDepth: "Lines read",
+      scanDepthTitle: "How many of the latest lines are searched for keywords",
+      tokenBudget: "Budget (tokens)",
+      tokenBudgetTitle: "Most room the knowledge may take in the prompt",
+      unsupported:
+        "SillyTavern settings kept for export but without effect here (regex, probability…).",
+      deleteEntry: "Delete entry",
+    },
     pickStartingPoint: "Pick a starting point",
     everythingEditable: "Everything stays editable after creation.",
     blankSheet: "Blank sheet",

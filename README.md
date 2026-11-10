@@ -34,7 +34,10 @@ your disk. No account, no telemetry.
 - **English or French**, for the interface and for the characters,
   independently.
 - **SillyTavern character cards.** Import cards (PNG or JSON, V1 to V3) with
-  their portrait, and export any character as a card, ready for SillyTavern.
+  their portrait and lorebook, and export any character as a card, ready for
+  SillyTavern.
+- **Knowledge.** Give a character lorebook entries: what they know comes back
+  to them when its keywords come up in the scene, and only to them.
   Characters always speak the conversation language; a sheet written in
   another one can be translated in a click.
 

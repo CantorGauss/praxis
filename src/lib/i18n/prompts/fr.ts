@@ -46,6 +46,27 @@ function selfGenderClause(gender: Gender): string {
 
 const USER_LABEL = "Utilisateur";
 
+/** Règles communes aux traductions de fiches et de connaissances. */
+const FR_TRANSLATION_RULES =
+  "- traduis fidèlement : n'ajoute, ne retire et n'adoucis rien ; garde le " +
+  "registre, l'humour, la grossièreté et la mise en forme (paragraphes, " +
+  "listes, *actions entre astérisques*) ;\n" +
+  "- ne traduis pas les noms propres ;\n";
+
+/** Accord du personnage dans une traduction vers le français. */
+function frTranslationAgreement(personaName: string, gender: Gender): string {
+  return (
+    `- ${personaName} est ` +
+    (gender === "feminine"
+      ? "un personnage féminin : accorde au féminin ce qui le désigne"
+      : gender === "masculine"
+        ? "un personnage masculin : accorde au masculin ce qui le désigne"
+        : "un personnage dont le genre n'est pas fixé : préfère des tournures " +
+          "qui évitent l'accord") +
+    " ;\n"
+  );
+}
+
 export const frPrompts: PromptPack = {
   locale: "fr",
   languageName: "français",
@@ -188,6 +209,16 @@ export const frPrompts: PromptPack = {
 
     stableTraits: (traits) =>
       `[TRAITS STABLES]\n${traits.map((t) => `- ${t}`).join("\n")}`,
+
+    knowledge: (entries) =>
+      `[CE QUE TU SAIS]\n` +
+      `Ce que tu sais de ton monde et de ton passé. Sers-t'en quand c'est utile, ` +
+      `sans le réciter.\n\n${entries.join("\n\n")}`,
+
+    recalledKnowledge: (entries) =>
+      `[CE QUI TE REVIENT]\n` +
+      `La scène vient d'évoquer des choses que tu connais. Voici ce que tu en ` +
+      `sais, à utiliser si ça sert ta réplique, sans le réciter.\n\n${entries.join("\n\n")}`,
 
     responseLength: (instruction) => `[LONGUEUR DE RÉPONSE]\n${instruction}`,
 
@@ -563,25 +594,29 @@ export const frPrompts: PromptPack = {
     system: ({ personaName, gender }) =>
       "Tu traduis en français la fiche d'un personnage de théâtre improvisé. " +
       "Règles :\n" +
-      "- traduis fidèlement : n'ajoute, ne retire et n'adoucis rien ; garde le " +
-      "registre, l'humour, la grossièreté et la mise en forme (paragraphes, " +
-      "listes, *actions entre astérisques*) ;\n" +
+      FR_TRANSLATION_RULES +
       "- garde la personne grammaticale du texte : une fiche à la troisième " +
       "personne le reste, une fiche qui dit « you » passe au tutoiement ;\n" +
-      "- ne traduis pas les noms propres ;\n" +
-      `- ${personaName} est ` +
-      (gender === "feminine"
-        ? "un personnage féminin : accorde au féminin ce qui le désigne"
-        : gender === "masculine"
-          ? "un personnage masculin : accorde au masculin ce qui le désigne"
-          : "un personnage dont le genre n'est pas fixé : préfère des tournures " +
-            "qui évitent l'accord") +
-      " ;\n" +
+      frTranslationAgreement(personaName, gender) +
       "- les traits restent des mots ou des groupes de mots courts, un par entrée ;\n" +
       "- un champ déjà en français est recopié tel quel.\n" +
       "Réponds UNIQUEMENT par un objet JSON de la même forme, sans commentaire :\n" +
       '{"description":"…","character":"…","traits":["…"]}',
     user: (sheet) => `Fiche à traduire :\n${sheet}`,
+    loreSystem: ({ personaName, gender }) =>
+      "Tu traduis en français des entrées du lorebook d'un personnage de théâtre " +
+      "improvisé : ce qu'il sait de son monde. Chaque entrée a un contenu et des " +
+      "mots-clés qui la rappellent quand ils apparaissent dans la conversation.\n" +
+      "Règles :\n" +
+      FR_TRANSLATION_RULES +
+      frTranslationAgreement(personaName, gender) +
+      "- pour chaque mot-clé, donne le mot ou l'expression qu'on emploierait en " +
+      "français dans la conversation ; un nom propre reste tel quel ;\n" +
+      "- garde le champ i de chaque entrée, et toutes les entrées ;\n" +
+      "- un texte déjà en français est recopié tel quel.\n" +
+      "Réponds UNIQUEMENT par un objet JSON de la même forme, sans commentaire :\n" +
+      '{"entries":[{"i":0,"keys":["…"],"secondary":["…"],"content":"…"}]}',
+    loreUser: (entries) => `Entrées à traduire :\n${entries}`,
   },
 
   objectives: {

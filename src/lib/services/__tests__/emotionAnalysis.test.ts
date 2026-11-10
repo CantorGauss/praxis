@@ -38,6 +38,7 @@ const persona: Persona = {
   gender: "feminine",
   avatarSetId: null,
   avatarStyle: null,
+  lorebook: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

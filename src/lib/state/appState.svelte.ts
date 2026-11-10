@@ -76,7 +76,7 @@ import {
 } from "../services/scene";
 import { promptPack } from "../i18n/prompts";
 import { setUiLocale, t } from "../i18n/ui.svelte";
-import { translatePersonaSheet, type TranslatedSheet } from "../services/translation";
+import { translatePersonaSheet, type TranslationResult } from "../services/translation";
 import { chooseSpeakers } from "../services/director";
 import { detectStagnation, linesSinceNarration } from "../services/stagnation";
 import { inventSceneTwist, TWIST_COOLDOWN_LINES } from "../services/twist";
@@ -2646,7 +2646,7 @@ class AppState {
    * l'enregistrer : l'interface l'applique et garde de quoi revenir en
    * arrière. Lève une erreur lisible si rien n'est utilisable.
    */
-  async translatePersona(persona: Persona): Promise<TranslatedSheet> {
+  async translatePersona(persona: Persona): Promise<TranslationResult> {
     const target = this.target;
     if (!target) throw new Error(t().app.noConnection);
     const modelId = this.activeModelId;

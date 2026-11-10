@@ -939,6 +939,14 @@ fn migrations() -> Vec<Migration> {
             // obtenir et ce qu'il cache. NULL = pas encore écrits.
             sql: "ALTER TABLE conversations ADD COLUMN objectives TEXT;",
         },
+        Migration {
+            version: 15,
+            description: "persona_lorebook",
+            kind: MigrationKind::Up,
+            // Connaissances du personnage en JSON (lorebook des cartes
+            // SillyTavern) : entrées rappelées sur mots-clés. NULL = aucune.
+            sql: "ALTER TABLE personas ADD COLUMN lorebook TEXT;",
+        },
     ]
 }
 

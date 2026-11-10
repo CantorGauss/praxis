@@ -27,6 +27,7 @@ import type { PresenceSpan } from "./presence";
 import { decodeMemory } from "./memory";
 import { decodeObjectives, encodeObjectives } from "./objectives";
 import type { CardPersonaDraft } from "./characterCard";
+import { normalizeLorebook, type Lorebook } from "./lorebook";
 
 // ---------------------------------------------------------------------------
 // Réglages (table clé/valeur)
@@ -301,9 +302,24 @@ type PersonaRow = {
   gender: Persona["gender"] | null;
   avatar_set_id: string | null;
   avatar_style: string | null;
+  lorebook: string | null;
   created_at: string;
   updated_at: string;
 };
+
+function parseLorebook(raw: string | null): Lorebook | null {
+  if (!raw) return null;
+  try {
+    return normalizeLorebook(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** Un livre vide n'est pas stocké : NULL dit plus simplement « aucune connaissance ». */
+function encodeLorebook(book: Lorebook | null): string | null {
+  return book && book.entries.length > 0 ? JSON.stringify(book) : null;
+}
 
 /** L'apparence stockée est complétée : un JSON absent ou abîmé retombe sur
  *  l'apparence déduite de l'identifiant. */
@@ -337,6 +353,7 @@ function personaFromRow(r: PersonaRow): Persona {
     gender: r.gender ?? "neutral",
     avatarSetId: r.avatar_set_id,
     avatarStyle: parseAvatarStyle(r.avatar_style, r.id),
+    lorebook: parseLorebook(r.lorebook ?? null),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -370,8 +387,8 @@ export const personaRepo = {
       `INSERT INTO personas
         (id, name, description, system_prompt, stable_traits, default_model_id,
          temperature, top_p, max_output_tokens, thinking_mode, gender,
-         avatar_set_id, avatar_style, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         avatar_set_id, avatar_style, lorebook, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
         id,
         input.name,
@@ -388,6 +405,7 @@ export const personaRepo = {
         input.gender,
         input.avatarSetId,
         input.avatarStyle ? JSON.stringify(input.avatarStyle) : null,
+        encodeLorebook(input.lorebook),
         now,
         now,
       ],
@@ -405,7 +423,7 @@ export const personaRepo = {
         name = $2, description = $3, system_prompt = $4, stable_traits = $5,
         default_model_id = $6, temperature = $7, top_p = $8,
         max_output_tokens = $9, thinking_mode = $10, gender = $11,
-        avatar_set_id = $12, avatar_style = $13, updated_at = $14
+        avatar_set_id = $12, avatar_style = $13, lorebook = $14, updated_at = $15
        WHERE id = $1`,
       [
         persona.id,
@@ -421,6 +439,7 @@ export const personaRepo = {
         persona.gender,
         persona.avatarSetId,
         persona.avatarStyle ? JSON.stringify(persona.avatarStyle) : null,
+        encodeLorebook(persona.lorebook),
         nowIso(),
       ],
     );
@@ -1115,6 +1134,7 @@ export type PersonaExport = {
   maxOutputTokens: number | null;
   gender: Persona["gender"];
   appearance: AvatarAppearance | null;
+  lorebook?: Lorebook | null;
 };
 
 const PERSONAS_FILE_KIND = "praxis.personas";
@@ -1131,6 +1151,7 @@ export async function exportPersonas(): Promise<string> {
     maxOutputTokens: p.maxOutputTokens,
     gender: p.gender,
     appearance: p.avatarStyle,
+    lorebook: p.lorebook,
   }));
   return JSON.stringify(
     { kind: PERSONAS_FILE_KIND, version: 1, exportedAt: nowIso(), personas: payload },
@@ -1183,6 +1204,7 @@ export async function importPersonas(json: string): Promise<number> {
           : "neutral",
       avatarSetId: null,
       avatarStyle: normalizeAppearance(entry.appearance, id),
+      lorebook: normalizeLorebook(entry.lorebook),
     });
     created += 1;
   }
@@ -1215,6 +1237,7 @@ export async function createPersonaFromCard(
     gender: draft.gender,
     avatarSetId: null,
     avatarStyle: normalizeAppearance(draft.appearance, seed),
+    lorebook: draft.lorebook,
   });
   if (imagePath) {
     try {
