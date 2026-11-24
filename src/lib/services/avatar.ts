@@ -11,7 +11,8 @@ function findVariant(
 }
 
 /**
- * Ordre de sélection : mood+période, puis mood, puis période, puis neutre.
+ * Ordre de sélection : mood+période, puis mood, puis période, puis neutre,
+ * puis l'image générique (ni humeur ni période : celle d'une carte importée).
  * Retourne undefined si le jeu ne contient aucune variante utilisable —
  * l'interface bascule alors sur l'avatar généré intégré.
  */
@@ -24,7 +25,8 @@ export function resolveAvatar(
     findVariant(variants, state.mood, period) ??
     findVariant(variants, state.mood, null) ??
     findVariant(variants, null, period) ??
-    findVariant(variants, "neutral", null)
+    findVariant(variants, "neutral", null) ??
+    findVariant(variants, null, null)
   );
 }
 

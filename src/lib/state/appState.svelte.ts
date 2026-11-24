@@ -595,6 +595,7 @@ class AppState {
       await this.saveSettings();
     }
     this.personas = await personaRepo.list();
+    await this.reloadAvatarVariants();
     this.conversations = await conversationRepo.list();
     await this.reloadParticipantIndex();
     // Aucun salon n'est ouvert d'office : on entre dans une salle vide, et
@@ -982,26 +983,35 @@ class AppState {
     for (const persona of this.participants) targets.add(persona.id);
     const active = this.activePersona;
     if (active) targets.add(active.id);
+    // Les images importées ne dépendent pas des émotions : un portrait de
+    // carte s'affiche aussi quand elles sont désactivées.
+    await this.reloadAvatarVariants();
     if (!this.settings.emotionEnabled) {
       this.emotionalStates = {};
       this.emotionalReactions = {};
-      this.avatarVariantsByPersona = {};
       return;
     }
     const now = new Date();
     const states: Record<string, EmotionalState> = {};
-    const variants: Record<string, AvatarVariant[]> = {};
     for (const personaId of targets) {
-      const persona = this.personaById(personaId);
-      if (!persona) continue;
+      if (!this.personaById(personaId)) continue;
       const stored = (await emotionRepo.get(personaId)) ?? neutralState(personaId, now);
       const temporal = buildTemporalContext(now, stored.updatedAt, this.pack);
       states[personaId] = applyDecay(stored, now, temporal.dayPeriod);
-      variants[personaId] = persona.avatarSetId
-        ? await avatarRepo.variants(persona.avatarSetId)
-        : [];
     }
     this.emotionalStates = states;
+  }
+
+  /**
+   * Images importées de tous les personnages, pas seulement ceux de la scène :
+   * la liste des conversations, la distribution et le nouveau salon les
+   * montrent aussi.
+   */
+  async reloadAvatarVariants(): Promise<void> {
+    const variants: Record<string, AvatarVariant[]> = {};
+    for (const persona of this.personas) {
+      if (persona.avatarSetId) variants[persona.id] = await avatarRepo.variants(persona.avatarSetId);
+    }
     this.avatarVariantsByPersona = variants;
   }
 
@@ -2645,6 +2655,7 @@ class AppState {
 
   async reloadPersonas(): Promise<void> {
     this.personas = await personaRepo.list();
+    await this.reloadAvatarVariants();
   }
 
   /** Connexion, modèle et paramètres pour traduire une fiche. */

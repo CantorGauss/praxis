@@ -50,6 +50,13 @@ describe("resolveAvatar", () => {
     expect(resolveAvatar(variants, { mood: "annoyed" }, "morning")?.id).toBe("neutral");
   });
 
+  it("utilise l'image générique d'une carte importée (ni humeur ni période)", () => {
+    const variants = [variant("card", null, null)];
+    expect(resolveAvatar(variants, { mood: "joyful" }, "night")?.id).toBe("card");
+    // Une variante plus précise garde la priorité.
+    expect(resolveAvatar([...variants, variant("neutral", "neutral", null)], { mood: "calm" }, "night")?.id).toBe("neutral");
+  });
+
   it("retourne undefined sans aucune variante utilisable", () => {
     expect(resolveAvatar([], { mood: "calm" }, "morning")).toBeUndefined();
   });

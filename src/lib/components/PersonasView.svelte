@@ -1077,6 +1077,7 @@
     flex: 0 0 38px;
     border-radius: 50%;
     object-fit: cover;
+    object-position: center 15%;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--persona-accent) 58%, transparent);
   }
 
@@ -1121,6 +1122,7 @@
     border-radius: 50%;
     flex-shrink: 0;
     object-fit: cover;
+    object-position: center 15%;
     box-shadow:
       0 0 0 3px var(--bg-panel),
       0 0 0 5px var(--persona-accent),
@@ -1320,6 +1322,7 @@
     height: 52px;
     border-radius: 50%;
     object-fit: cover;
+    object-position: center 15%;
   }
 
   .avatar-choice > span {
