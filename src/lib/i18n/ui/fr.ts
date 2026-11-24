@@ -183,6 +183,8 @@ export const frUi: UiStrings = {
     translateSheet: (language: string) => `Traduire en ${language}`,
     translating: "Traduction…",
     translated: "Fiche traduite. Relisez-la : tout reste modifiable.",
+    translatingLore: (done: number, total: number) =>
+      `Traduction des connaissances… ${done} sur ${total}.`,
     restoreOriginal: "Rétablir l’original",
     translationFailed:
       "Le modèle n’a rien renvoyé d’exploitable. La fiche n’a pas changé.",

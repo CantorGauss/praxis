@@ -72,6 +72,10 @@
     /** Connaissances restées dans leur langue. */
     untranslated: number;
   } | null>(null);
+  /** Avancement de la traduction des connaissances, en entrées. */
+  let loreProgress = $state<{ personaId: string; done: number; total: number } | null>(null);
+  /** Change à chaque traduction lancée ou annulée : un résultat périmé est ignoré. */
+  let translationRun = 0;
 
   /** Images importées (cartes SillyTavern), par personnage ; elles priment sur le portrait intégré. */
   let imported = $state<Record<string, string>>({});
@@ -236,9 +240,10 @@
     translatingId = p.id;
     translationError = null;
     try {
-      const { untranslatedEntries, ...sheet } = await app.translatePersona(p);
+      const sheet = await app.translatePersona(p);
       // Relu après l'appel : un champ a pu être corrigé pendant la traduction.
       const latest = app.personaById(p.id) ?? p;
+      const run = ++translationRun;
       lastTranslation = {
         personaId: p.id,
         before: {
@@ -247,9 +252,19 @@
           stableTraits: [...latest.stableTraits],
           lorebook: latest.lorebook,
         },
-        untranslated: untranslatedEntries,
+        untranslated: 0,
       };
+      // La fiche s'affiche tout de suite ; les connaissances suivent.
       await patch(latest, sheet);
+      if (!latest.lorebook?.entries.length) return;
+      loreProgress = { personaId: p.id, done: 0, total: latest.lorebook.entries.length };
+      const lore = await app.translatePersonaLore(latest, (done, total) => {
+        loreProgress = { personaId: p.id, done, total };
+      });
+      // « Rétablir » cliqué entre-temps : la traduction des connaissances est abandonnée.
+      if (run !== translationRun || lastTranslation?.personaId !== p.id) return;
+      lastTranslation = { ...lastTranslation, untranslated: lore.untranslatedEntries };
+      await patch(app.personaById(p.id) ?? latest, { lorebook: lore.lorebook });
     } catch (e) {
       translationError = {
         personaId: p.id,
@@ -257,6 +272,7 @@
       };
     } finally {
       translatingId = null;
+      loreProgress = null;
     }
   }
 
@@ -264,6 +280,7 @@
     if (lastTranslation?.personaId !== p.id) return;
     const before = lastTranslation.before;
     lastTranslation = null;
+    translationRun += 1;
     await patch(app.personaById(p.id) ?? p, before);
   }
 
@@ -594,8 +611,13 @@
         <div class="language-note">
           <span>
             {s.personas.translated}
-            {#if lastTranslation.untranslated > 0}
+            {#if loreProgress?.personaId === p.id}
+              <em>{s.personas.translatingLore(loreProgress.done, loreProgress.total)}</em>
+            {:else if lastTranslation.untranslated > 0}
               <em class="language-error">{s.personas.untranslatedEntries(lastTranslation.untranslated)}</em>
+            {/if}
+            {#if translationError?.personaId === p.id}
+              <em class="language-error">{translationError.message}</em>
             {/if}
           </span>
           <button class="btn" onclick={() => void restoreOriginal(p)}>

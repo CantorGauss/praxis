@@ -184,6 +184,8 @@ export const enUi = {
     translateSheet: (language: string) => `Translate into ${language}`,
     translating: "Translating…",
     translated: "Sheet translated. Read it over: everything stays editable.",
+    translatingLore: (done: number, total: number) =>
+      `Translating knowledge… ${done} of ${total}.`,
     restoreOriginal: "Restore the original",
     translationFailed:
       "The model returned nothing usable. The sheet is unchanged.",

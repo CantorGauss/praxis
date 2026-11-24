@@ -4,6 +4,7 @@ import {
   parseLoreTranslation,
   parseTranslation,
   sheetForTranslation,
+  translateLorebook,
   translatePersonaSheet,
 } from "../translation";
 import { blankEntry, emptyLorebook, type LoreEntry } from "../lorebook";
@@ -165,5 +166,49 @@ describe("traduction des connaissances", () => {
     expect(lorebook.entries[3].content).toBe("Fact 3.");
     const loreCall = chat.mock.calls[1][1] as { messages: { content: string }[] };
     expect(loreCall.messages[0].content).toContain("mots-clés");
+  });
+
+  function bigBook(count: number) {
+    return {
+      ...emptyLorebook(),
+      entries: Array.from({ length: count }, (_, i) =>
+        loreEntry({ keys: [`k${i}`], content: `${i} `.padEnd(3500, "x") }),
+      ),
+    };
+  }
+
+  async function peakConcurrency(baseUrl: string) {
+    let inFlight = 0;
+    let peak = 0;
+    vi.spyOn(llm, "chatCompletion").mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return "{}";
+    });
+    const progress: number[] = [];
+    const result = await translateLorebook(
+      {
+        connection: { ...connection, baseUrl },
+        modelId: "m",
+        persona: { ...original, lorebook: bigBook(6) },
+        pack: promptPack("fr"),
+      },
+      (done) => progress.push(done),
+    );
+    return { peak, progress, result };
+  }
+
+  it("traduit plusieurs lots à la fois sur un serveur distant, et rend compte de l'avancement", async () => {
+    const { peak, progress, result } = await peakConcurrency("https://openrouter.ai/api/v1");
+    expect(peak).toBe(4);
+    expect(progress).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(result.untranslatedEntries).toBe(6);
+  });
+
+  it("traduit un lot à la fois sur un serveur local", async () => {
+    const { peak } = await peakConcurrency("http://127.0.0.1:1234/v1");
+    expect(peak).toBe(1);
   });
 });

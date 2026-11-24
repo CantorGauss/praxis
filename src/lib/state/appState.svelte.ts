@@ -76,7 +76,13 @@ import {
 } from "../services/scene";
 import { promptPack } from "../i18n/prompts";
 import { setUiLocale, t } from "../i18n/ui.svelte";
-import { translatePersonaSheet, type TranslationResult } from "../services/translation";
+import {
+  translateLorebook,
+  translateSheet,
+  type LoreTranslation,
+  type TranslatedSheet,
+  type TranslationInput,
+} from "../services/translation";
 import { chooseSpeakers } from "../services/director";
 import { detectStagnation, linesSinceNarration } from "../services/stagnation";
 import { inventSceneTwist, TWIST_COOLDOWN_LINES } from "../services/twist";
@@ -2641,26 +2647,39 @@ class AppState {
     this.personas = await personaRepo.list();
   }
 
-  /**
-   * Traduit la fiche d'un personnage dans la langue des conversations, sans
-   * l'enregistrer : l'interface l'applique et garde de quoi revenir en
-   * arrière. Lève une erreur lisible si rien n'est utilisable.
-   */
-  async translatePersona(persona: Persona): Promise<TranslationResult> {
+  /** Connexion, modèle et paramètres pour traduire une fiche. */
+  private async translationInput(persona: Persona): Promise<TranslationInput> {
     const target = this.target;
     if (!target) throw new Error(t().app.noConnection);
     const modelId = this.activeModelId;
     if (!modelId) throw new Error(t().app.noModel);
     const profile = await profileRepo.get(modelId);
-    const sheet = await translatePersonaSheet({
+    return {
       connection: target,
       modelId,
       persona,
       extraParameters: profile.customParameters,
       pack: this.pack,
-    });
+    };
+  }
+
+  /**
+   * Traduit la fiche d'un personnage (sans ses connaissances) dans la langue
+   * des conversations, sans l'enregistrer : l'interface l'applique et garde de
+   * quoi revenir en arrière. Lève une erreur lisible si rien n'est utilisable.
+   */
+  async translatePersona(persona: Persona): Promise<TranslatedSheet> {
+    const sheet = await translateSheet(await this.translationInput(persona));
     if (!sheet) throw new Error(t().personas.translationFailed);
     return sheet;
+  }
+
+  /** Traduit les connaissances d'un personnage, sans les enregistrer. */
+  async translatePersonaLore(
+    persona: Persona,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<LoreTranslation> {
+    return translateLorebook(await this.translationInput(persona), onProgress);
   }
 
   /** Après suppression d'une persona : recharger conversations et scènes. */
