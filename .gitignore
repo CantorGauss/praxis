@@ -13,3 +13,6 @@ vite.config.ts.timestamp-*
 
 # Claude Code local state (worktrees, settings)
 /.claude/
+
+# Cartes SillyTavern locales (exemples personnels)
+Lorebooks/

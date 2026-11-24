@@ -137,6 +137,8 @@
     height: 100%;
     border-radius: 50%;
     object-fit: cover;
+    /* Les cartes sont des portraits en hauteur : le visage est en haut. */
+    object-position: center 15%;
   }
 
   @media (prefers-reduced-motion: reduce) {

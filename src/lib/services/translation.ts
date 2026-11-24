@@ -188,59 +188,120 @@ function outputBudget(text: string): number {
   return Math.min(8000, Math.ceil(text.length / 2) + 300);
 }
 
+/** Lots de connaissances traduits en même temps par un serveur distant. */
+const REMOTE_LORE_CONCURRENCY = 4;
+
 /**
- * Fiche et connaissances traduites. Retourne null si la fiche elle-même n'a
- * pas pu l'être ; les lots de connaissances qui échouent restent dans leur
- * langue et sont comptés.
+ * Un serveur local traite souvent une requête à la fois : des lots envoyés en
+ * parallèle y feraient la queue et dépasseraient le délai d'attente.
  */
-export async function translatePersonaSheet(
-  input: TranslationInput,
-): Promise<TranslationResult | null> {
-  const pack = input.pack ?? DEFAULT_PROMPT_PACK;
-  const who = { personaName: input.persona.name, gender: input.persona.gender };
-  const base = {
+function loreConcurrency(connection: ConnectionTarget): number {
+  try {
+    const host = new URL(connection.baseUrl).hostname.replace(/^\[|\]$/g, "");
+    const local =
+      host === "localhost" ||
+      host === "::1" ||
+      host.startsWith("127.") ||
+      host.endsWith(".local") ||
+      host.endsWith(".localhost");
+    return local ? 1 : REMOTE_LORE_CONCURRENCY;
+  } catch {
+    return 1;
+  }
+}
+
+function requestBase(input: TranslationInput) {
+  return {
     ...noThinkingRequestParameters(input.connection, input.extraParameters ?? {}),
     model: input.modelId,
     temperature: 0.2,
   };
+}
 
+function speaker(input: TranslationInput) {
+  return { personaName: input.persona.name, gender: input.persona.gender };
+}
+
+/** La fiche seule (description, caractère, traits). Null si inutilisable. */
+export async function translateSheet(input: TranslationInput): Promise<TranslatedSheet | null> {
+  const pack = input.pack ?? DEFAULT_PROMPT_PACK;
   const sheet = sheetForTranslation(input.persona);
   const raw = await chatCompletion(input.connection, {
-    ...base,
+    ...requestBase(input),
     max_tokens: outputBudget(sheet),
     messages: [
-      { role: "system", content: pack.translation.system(who) },
+      { role: "system", content: pack.translation.system(speaker(input)) },
       { role: "user", content: pack.translation.user(sheet) },
     ],
   });
-  const translated = parseTranslation(raw, input.persona);
-  if (!translated) return null;
+  return parseTranslation(raw, input.persona);
+}
 
+export type LoreTranslation = {
+  lorebook: Lorebook | null;
+  /** Entrées restées dans leur langue (lot refusé ou illisible). */
+  untranslatedEntries: number;
+};
+
+/**
+ * Les connaissances, par lots, plusieurs à la fois quand le serveur le permet.
+ * `onProgress` reçoit le nombre d'entrées traitées sur le total. Les lots qui
+ * échouent restent dans leur langue et sont comptés ; l'original n'est jamais
+ * modifié en place.
+ */
+export async function translateLorebook(
+  input: TranslationInput,
+  onProgress?: (done: number, total: number) => void,
+): Promise<LoreTranslation> {
   const book = input.persona.lorebook;
-  if (!book || book.entries.length === 0) {
-    return { ...translated, lorebook: book, untranslatedEntries: 0 };
-  }
+  if (!book || book.entries.length === 0) return { lorebook: book, untranslatedEntries: 0 };
+  const pack = input.pack ?? DEFAULT_PROMPT_PACK;
+  const base = requestBase(input);
+  const who = speaker(input);
   const entries = book.entries.map((e) => ({ ...e }));
+  const batches = loreBatches(entries);
+  const total = entries.length;
+  let processed = 0;
   let untranslated = 0;
-  for (const batch of loreBatches(entries)) {
-    const payload = JSON.stringify({ entries: batch }, null, 2);
-    try {
-      const answer = await chatCompletion(input.connection, {
-        ...base,
-        max_tokens: outputBudget(payload),
-        messages: [
-          { role: "system", content: pack.translation.loreSystem(who) },
-          { role: "user", content: pack.translation.loreUser(payload) },
-        ],
-      });
-      untranslated += batch.length - parseLoreTranslation(answer, entries, batch);
-    } catch {
-      untranslated += batch.length;
+  let next = 0;
+  onProgress?.(0, total);
+
+  async function worker() {
+    while (next < batches.length) {
+      const batch = batches[next++];
+      const payload = JSON.stringify({ entries: batch }, null, 2);
+      try {
+        const answer = await chatCompletion(input.connection, {
+          ...base,
+          max_tokens: outputBudget(payload),
+          messages: [
+            { role: "system", content: pack.translation.loreSystem(who) },
+            { role: "user", content: pack.translation.loreUser(payload) },
+          ],
+        });
+        untranslated += batch.length - parseLoreTranslation(answer, entries, batch);
+      } catch {
+        untranslated += batch.length;
+      }
+      processed += batch.length;
+      onProgress?.(processed, total);
     }
   }
-  return {
-    ...translated,
-    lorebook: { ...book, entries },
-    untranslatedEntries: untranslated,
-  };
+
+  const workers = Math.min(loreConcurrency(input.connection), batches.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return { lorebook: { ...book, entries }, untranslatedEntries: untranslated };
+}
+
+/**
+ * Fiche et connaissances traduites. Retourne null si la fiche elle-même n'a
+ * pas pu l'être.
+ */
+export async function translatePersonaSheet(
+  input: TranslationInput,
+  onLoreProgress?: (done: number, total: number) => void,
+): Promise<TranslationResult | null> {
+  const translated = await translateSheet(input);
+  if (!translated) return null;
+  return { ...translated, ...(await translateLorebook(input, onLoreProgress)) };
 }
